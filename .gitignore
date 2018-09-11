@@ -1,0 +1,5 @@
+*.log
+/target/
+/cljs-test-runner-out/
+test/runner.cljs
+node_modules/
