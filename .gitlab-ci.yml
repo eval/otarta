@@ -1,0 +1,34 @@
+stages:
+  - build-and-test
+
+build:
+  stage: build-and-test
+  image: clojure:tools-deps-1.9.0.381-alpine
+  tags:
+    - docker
+  before_script:
+    - apk --update add make nodejs-npm
+    - mkdir -p deps/{m2,gitlibs} && rm -rf ~/.m2 ~/.gitlibs && ln -sf $(pwd)/deps/m2 ~/.m2 && ln -sf $(pwd)/deps/gitlibs ~/.gitlibs
+  script:
+    - make compile
+  cache:
+    key: deps
+    paths:
+      - deps
+
+
+test:
+  stage: build-and-test
+  image: clojure:tools-deps-1.9.0.381-alpine
+  tags:
+    - docker
+  before_script:
+    - apk --update add make nodejs-npm yarn
+    - yarn add websocket
+    - mkdir -p deps/{m2,gitlibs} && rm -rf ~/.m2 ~/.gitlibs && ln -sf $(pwd)/deps/m2 ~/.m2 && ln -sf $(pwd)/deps/gitlibs ~/.gitlibs
+  script:
+    - make test
+  cache:
+    key: deps
+    paths:
+      - deps
