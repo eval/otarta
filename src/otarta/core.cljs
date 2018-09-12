@@ -214,12 +214,27 @@
 
 
 (defn connect
-  "Tries to connect to broker"
+  "Connect with broker. Idempotent.
+  No need to call this as on publishing/subscribing this is called."
   [client]
-  (<err-> client
-          (stream-connect)
-          (mqtt-connect)
-          (start-pinger)))
+  (info :connect)
+  ;; naive way for now
+  (let [connected? (-> client :stream deref)]
+    (info :connect :needed? (not connected?))
+    (if connected?
+      (go [nil client])
+      (<err-> client
+              (stream-connect)
+              (mqtt-connect)
+              (start-pinger)))))
+
+
+(defn publish* [client topic msg]
+  (info :publish :client client :topic topic :msg msg)
+  (go
+    (let [pkt (packet/publish {:topic topic :payload msg})]
+      (>! (-> client :stream deref :sink) pkt)
+      [nil {}])))
 
 
 (defn publish
@@ -229,20 +244,12 @@
   underlying connection is active, nor whether the broker received
   the message (ie qos 0)."
   [client topic msg]
-  (info :publish :client client :topic topic :msg msg)
-  (go
-    (let [pkt (packet/publish {:topic topic :payload msg})]
-      (>! (-> client :stream deref :sink) pkt)
-      [nil {}])))
+  (<err-> client
+          connect
+          (publish* topic msg)))
 
 
-(defn subscribe
-  "Yields async-channel that returns [err result] when subscribing was successful.
-
-  `err` is a keyword indicating what went wrong, or nil when all is
-  fine.  
-  `result` is a map like {:chan channel}
-"
+(defn subscribe*
   [{stream :stream :as client} topic-filter]
   (info :subscribe :topic-filter topic-filter)
   (go
@@ -264,6 +271,19 @@
         err      [err nil]
         failure? [:broker-refused-sub nil]
         :else    [nil {:chan result-chan}]))))
+
+
+(defn subscribe
+  "Yields async-channel that returns [err result] when subscribing was successful.
+
+  `err` is a keyword indicating what went wrong, or nil when all is
+  fine.  
+  `result` is a map like {:chan channel}
+"
+  [client topic-filter]
+  (<err-> client
+          connect
+          (subscribe* topic-filter)))
 
 
 (defn disconnect
