@@ -19,9 +19,9 @@
 
   Example:
   (go
-    (let [[err result] (<err-> {:url \"some-url\"}
-                               (connect {:keep-alive 10})
-                               (do-query {:some :selector}))]
+    (let [[err result] (<! (<err-> {:url \"some-url\"}
+                                   (connect {:keep-alive 10})
+                                   (do-query {:some :selector})))]
       (if err
         (println \"Something went wrong:\" err)
         (println \"Query result:\" result))))
@@ -39,8 +39,8 @@
 
   Example:
   (go
-    (let [[err result] (<err->> connect-opts
-                                (connect client))]
+    (let [[err result] (<! (<err->> connect-opts
+                                    (connect client)))]
       (if err
         (println \"Something went wrong:\" err)
         (println \"Connect result:\" result))))
