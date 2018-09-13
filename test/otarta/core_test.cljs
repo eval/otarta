@@ -42,3 +42,26 @@
       "#"          "$SYS/broker/load/publish/sent/15min" false ;; !!
       "+/broker/#" "$SYS/broker/load/publish/sent/15min" false ;; !!
 )))
+
+
+(deftest packet-filter-test
+  (testing "matches a map *iff* all are matching"
+    (are [matchers pkt expected] (= expected
+                                    (not (empty?
+                                          (into [] (sut/packet-filter matchers) [pkt]))))
+      ;; simple
+      {[:a] 1}         {:a 1}      true
+      {[:a] 1 [:b] 2}  {:a 1 :b 2} true
+      {[:a] 1 [:b] 10} {:a 1 :b 2} false
+      {[:a] 1 [:b] 2}  {:a 1}      false
+      {[:a] nil}       {}          false
+
+      ;; nested
+      {[:a :b] 1}   {:a {:b 1}} true
+      {[:a :b] nil} {:a {:c 1}} false
+
+      ;; matchers can be predicates
+      {[:a] odd?}          {:a 5} true
+      {[:a] odd?}          {:a 2} false
+      {[:a] (partial < 3)} {:a 4} true
+      {[:a] (partial < 3)} {:a 3} false)))
