@@ -229,7 +229,7 @@
               (start-pinger)))))
 
 
-(defn publish* [client topic msg]
+(defn- publish* [client topic msg]
   (info :publish :client client :topic topic :msg msg)
   (go
     (let [pkt (packet/publish {:topic topic :payload msg})]
@@ -249,7 +249,7 @@
           (publish* topic msg)))
 
 
-(defn subscribe*
+(defn- subscribe*
   [{stream :stream :as client} topic-filter]
   (info :subscribe :topic-filter topic-filter)
   (go
