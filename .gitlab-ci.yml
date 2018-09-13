@@ -8,14 +8,13 @@ build:
     - docker
   before_script:
     - apk --update add make nodejs-npm
-    - mkdir -p deps/{m2,gitlibs} && rm -rf ~/.m2 ~/.gitlibs && ln -sf $(pwd)/deps/m2 ~/.m2 && ln -sf $(pwd)/deps/gitlibs ~/.gitlibs
+    - echo '{:mvn/local-repo "./m2"}' > ~/.clojure/deps.edn
   script:
     - make compile
   cache:
-    key: deps
+    key: m2
     paths:
-      - deps
-
+      - m2
 
 test:
   stage: build-and-test
@@ -25,10 +24,10 @@ test:
   before_script:
     - apk --update add make nodejs-npm yarn
     - yarn add websocket
-    - mkdir -p deps/{m2,gitlibs} && rm -rf ~/.m2 ~/.gitlibs && ln -sf $(pwd)/deps/m2 ~/.m2 && ln -sf $(pwd)/deps/gitlibs ~/.gitlibs
+    - echo '{:mvn/local-repo "./m2"}' > ~/.clojure/deps.edn
   script:
     - make test
   cache:
-    key: deps
+    key: m2
     paths:
-      - deps
+      - m2
