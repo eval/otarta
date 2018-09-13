@@ -56,7 +56,7 @@
                                    "$"))
         dollar-re (re-pattern (str "^" (some-> (re-find #"^\$[^/]*" topic)
                                                (string/replace #"\$" "\\$"))))]
-    ;; a sub-filter '#' should not match a broker-internal topic like '$SYS/foo'
+    ;; [MQTT-4.7.2-1] a sub-filter '#' should not match a broker-internal topic like '$SYS/foo'
     ;; you need a more explicit filter, eg '$SYS/+'
     (or (nil? topic)
         (and (re-find dollar-re topic-filter)
