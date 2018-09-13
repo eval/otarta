@@ -3,7 +3,7 @@ stages:
 
 build:
   stage: build-and-test
-  image: clojure:tools-deps-1.9.0.381-alpine
+  image: clojure:tools-deps-1.9.0.391-alpine
   tags:
     - docker
   before_script:
@@ -19,7 +19,7 @@ build:
 
 test:
   stage: build-and-test
-  image: clojure:tools-deps-1.9.0.381-alpine
+  image: clojure:tools-deps-1.9.0.391-alpine
   tags:
     - docker
   before_script:
