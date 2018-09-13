@@ -56,7 +56,7 @@
                                    "$"))
         dollar-re (re-pattern (str "^" (some-> (re-find #"^\$[^/]*" topic)
                                                (string/replace #"\$" "\\$"))))]
-    ;; a sub-filter '#' should not match a broker-internal topic like '$SYS/foo'
+    ;; [MQTT-4.7.2-1] a sub-filter '#' should not match a broker-internal topic like '$SYS/foo'
     ;; you need a more explicit filter, eg '$SYS/+'
     (or (nil? topic)
         (and (re-find dollar-re topic-filter)
@@ -130,27 +130,27 @@
   (-> stream :close-status (async/poll!) (nil?)))
 
 
-(defn stream-connect [{{url :ws-url} :config :as mqtt-conn}]
+(defn stream-connect [{{url :ws-url} :config :as client}]
   ;; yields tuple with either stream or error
   (info :stream-connect :url url)
   (go
     (let [stream (<! (stream/connect url {:protocols ["mqtt"]
                                           :format    mqtt-format}))]
       (if (stream-connected? stream)
-        [nil (and (update mqtt-conn :stream reset! stream) mqtt-conn)]
+        [nil (and (update client :stream reset! stream) client)]
         [:stream-connect-failed (<! (:close-status stream))]))))
 
 
-(defn stream-disconnect [mqtt-conn]
+(defn stream-disconnect [client]
   (info :stream-disconnect)
   (go
-    (let [close-status (<! (stream/close (deref (:stream mqtt-conn))))]
+    (let [close-status (<! (stream/close (deref (:stream client))))]
       (info :stream-disconnect :close-status close-status))
-    [nil mqtt-conn]))
+    [nil client]))
 
 
-(defn mqtt-connect [{:keys [stream config] :as mqtt-conn}]
-  (info :mqtt-connect :mqtt-conn mqtt-conn)
+(defn mqtt-connect [{:keys [stream config] :as client}]
+  (info :mqtt-connect :client client)
   (go
     (let [{:keys [sink source]} @stream
           next-connack          (capture-first-packet
@@ -161,21 +161,21 @@
       (cond
         err                       [err nil]
         (not (zero? return-code)) [:broker-refused {:return-code return-code}]
-        :else                     [nil mqtt-conn]))))
+        :else                     [nil client]))))
 
 
-(defn mqtt-disconnect [{stream :stream :as mqtt-conn}]
+(defn mqtt-disconnect [{stream :stream :as client}]
   (info :mqtt-disconnect)
   (go
     (>! (:sink @stream) (packet/disconnect))
-    [nil mqtt-conn]))
+    [nil client]))
 
 
 (defn start-pinger
   "Keeps mqtt-connection alive by sending pingreq's every `keep-alive`
   seconds."
   [{stream                   :stream
-    {keep-alive :keep-alive} :config :as mqtt-conn}]
+    {keep-alive :keep-alive} :config :as client}]
   (go
     (let [{:keys [sink source]} @stream
           control-ch            (async/promise-chan)]
@@ -193,15 +193,15 @@
                   (if v
                     (info :start-pinger :stopping)
                     (recur (inc n))))))))
-      (update mqtt-conn :pinger reset! control-ch)
-      [nil mqtt-conn])))
+      (update client :pinger reset! control-ch)
+      [nil client])))
 
 
-(defn stop-pinger [{pinger :pinger :as mqtt-conn}]
+(defn stop-pinger [{pinger :pinger :as client}]
   (info :stop-pinger :pinger (pr-str @pinger))
   (go
     (and @pinger (>! @pinger :stop))
-    [nil mqtt-conn]))
+    [nil client]))
 
 
 (defn client [{:keys [broker-url] :as opts}]
