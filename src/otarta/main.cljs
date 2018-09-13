@@ -5,7 +5,6 @@
    [goog.crypt :as crypt]
    [huon.log :as log :refer [debug info warn error]]
    [otarta.core :as mqtt]
-   [otarta.util :refer-macros [<err->]]
    websocket))
 
 
@@ -20,9 +19,7 @@
   (go
     (reset! client (mqtt/client {:broker-url broker-url :keep-alive 10}))
 
-    (let [[err {sub-ch :chan}] (<! (<err-> @client
-                                           mqtt/connect
-                                           (mqtt/subscribe topic-filter)))]
+    (let [[err {sub-ch :chan}] (<! (mqtt/subscribe @client topic-filter))]
       (if err
         (do (error err) (println (str "Could not subscribe: " err)))
         (go-loop []
@@ -36,9 +33,7 @@
   (go
     (reset! client (mqtt/client {:broker-url broker-url}))
 
-    (let [[err _] (<! (<err-> @client
-                              mqtt/connect
-                              (mqtt/publish topic msg)))]
+    (let [[err _] (<! (mqtt/publish @client topic msg))]
       (when err
         (error err)
         (println (str "Could not publish: " err)))
