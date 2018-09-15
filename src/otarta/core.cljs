@@ -207,7 +207,7 @@
 
 (defn connect
   "Connect with broker. Idempotent.
-  No need to call this as on publishing/subscribing this is called."
+  Typically there's no need to call this as it's called from `publish` and `subscribe`."
   [client]
   (info :connect)
   ;; naive way for now
