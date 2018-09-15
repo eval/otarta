@@ -219,9 +219,9 @@
   [client]
   (info :connect)
   ;; naive way for now
-  (let [connected? (-> client :stream deref)]
-    (info :connect :needed? (not connected?))
-    (if connected?
+  (let [stream-present? (-> client :stream deref)]
+    (debug :connect :stream-connect-required? (not stream-present?))
+    (if stream-present?
       (go [nil client])
       (<err-> client
               (stream-connect)
