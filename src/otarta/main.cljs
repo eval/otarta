@@ -17,14 +17,14 @@
 (defn handle-sub [broker-url topic-filter]
   (info :handle-sub :broker-url broker-url :topic-filter topic-filter)
   (go
-    (reset! client (mqtt/client {:broker-url broker-url :keep-alive 10}))
+    (reset! client (mqtt/client {:broker-url broker-url :keep-alive 60}))
 
     (let [[err {sub-ch :chan}] (<! (mqtt/subscribe @client topic-filter))]
       (if err
         (do (error err) (println (str "Could not subscribe: " err)))
         (go-loop []
-          (when-let [m (<! sub-ch)]
-            (prn (assoc m :payload (crypt/byteArrayToString (:payload m))))
+          (when-let [{:keys [payload]} (<! sub-ch)]
+            (when payload (println payload))
             (recur)))))))
 
 

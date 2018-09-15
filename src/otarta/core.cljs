@@ -8,6 +8,7 @@
    [haslett.format :as ws-fmt]
    [huon.log :refer [debug info warn error]]
    [lambdaisland.uri :as uri]
+   [otarta.format :as otarta-fmt]
    [otarta.packet :as packet]
    [otarta.util :as util :refer-macros [<err->]]))
 
@@ -115,7 +116,7 @@
 (defn capture-all-packets
   "Typically used with xf via `packet-filter`."
   [ch xf]
-  (tap-ch ch (async/chan (async/sliding-buffer 1) xf)))
+  (tap-ch ch (async/chan (async/sliding-buffer 1024) xf)))
 
 
 (defn stream-connected? [stream]
@@ -241,15 +242,35 @@
           (publish* topic msg)))
 
 
+(def payload-formats
+  {:edn otarta-fmt/edn
+   :raw otarta-fmt/raw
+   :string otarta-fmt/string
+   :json otarta-fmt/json})
+
+
+(defn payload-reader [format]
+  (let [fmt    (get payload-formats format format)
+        reader (fn [{pl :payload :as msg}]
+                 (let [fmt-payload (try
+                                     (otarta-fmt/read fmt pl)
+                                     (catch js/Error _
+                                       (error :payload-reader "failed for format" format)
+                                       nil))]
+                   (assoc msg :payload fmt-payload)))]
+    (map reader)))
+
+
 (defn- subscribe*
-  [{stream :stream :as client} topic-filter]
+  [{stream :stream :as client} topic-filter {:keys [format] :or {format :string}}]
   (info :subscribe :topic-filter topic-filter)
   (go
     (let [{:keys [sink source]} @stream
-
           pkt-filter  (packet-filter {[:remaining-bytes :topic]
                                       (partial topic-filter-matches-topic? topic-filter)})
-          result-chan (capture-all-packets source (comp pkt-filter (map publish-pkt->msg)))
+          result-chan (capture-all-packets source (comp pkt-filter
+                                                        (map publish-pkt->msg)
+                                                        (payload-reader format)))
           sub-pkt     (packet/subscribe {:topic-filter      topic-filter
                                          :packet-identifier 1})
           next-suback (capture-first-packet source
@@ -272,10 +293,11 @@
   fine.  
   `result` is a map like {:chan channel}
 "
-  [client topic-filter]
-  (<err-> client
-          connect
-          (subscribe* topic-filter)))
+  ([client topic-filter] (subscribe client topic-filter {}))
+  ([client topic-filter opts]
+   (<err-> client
+           connect
+           (subscribe* topic-filter opts))))
 
 
 (defn disconnect
