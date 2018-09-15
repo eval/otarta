@@ -93,7 +93,7 @@
   - {[:a] nil} does *not* match {} (cause there's no :a)
 
   You can provide a predicate:
-  - {[:a :b] (partial < 3)} matches {:a {:b 2}}
+  - {[:a :b] odd?} matches {:a {:b 3}}
 "
   [matchers]
   (let [matches-all? (fn [matchers pkt]
@@ -107,21 +107,13 @@
 
 
 (defn capture-first-packet
-  "Yield promise-chan with xf that filters packet to capture from ch.
-  Example matchers:
-  - {[:a :b] 2} matches {:a {:b 2}}
-
-  You can provide a predicate:
-  - {[:a :b] (partial < 3)} matches {:a {:b 2}}
-"
+  "Typically used with xf via `packet-filter`."
   [ch xf]
   (tap-ch ch (async/promise-chan xf)))
 
 
 (defn capture-all-packets
-  "Yield chan with xf that filters packets to capture from ch.
-  Example matchers:
-  - {[:a :b] 2} matches a packet like {:a {:b 2}}"
+  "Typically used with xf via `packet-filter`."
   [ch xf]
   (tap-ch ch (async/chan (async/sliding-buffer 1) xf)))
 
@@ -214,12 +206,27 @@
 
 
 (defn connect
-  "Tries to connect to broker"
+  "Connect with broker. Idempotent.
+  No need to call this as on publishing/subscribing this is called."
   [client]
-  (<err-> client
-          (stream-connect)
-          (mqtt-connect)
-          (start-pinger)))
+  (info :connect)
+  ;; naive way for now
+  (let [stream-present? (-> client :stream deref)]
+    (debug :connect :stream-connect-required? (not stream-present?))
+    (if stream-present?
+      (go [nil client])
+      (<err-> client
+              (stream-connect)
+              (mqtt-connect)
+              (start-pinger)))))
+
+
+(defn- publish* [client topic msg]
+  (info :publish :client client :topic topic :msg msg)
+  (go
+    (let [pkt (packet/publish {:topic topic :payload msg})]
+      (>! (-> client :stream deref :sink) pkt)
+      [nil {}])))
 
 
 (defn publish
@@ -229,20 +236,12 @@
   underlying connection is active, nor whether the broker received
   the message (ie qos 0)."
   [client topic msg]
-  (info :publish :client client :topic topic :msg msg)
-  (go
-    (let [pkt (packet/publish {:topic topic :payload msg})]
-      (>! (-> client :stream deref :sink) pkt)
-      [nil {}])))
+  (<err-> client
+          connect
+          (publish* topic msg)))
 
 
-(defn subscribe
-  "Yields async-channel that returns [err result] when subscribing was successful.
-
-  `err` is a keyword indicating what went wrong, or nil when all is
-  fine.  
-  `result` is a map like {:chan channel}
-"
+(defn- subscribe*
   [{stream :stream :as client} topic-filter]
   (info :subscribe :topic-filter topic-filter)
   (go
@@ -264,6 +263,19 @@
         err      [err nil]
         failure? [:broker-refused-sub nil]
         :else    [nil {:chan result-chan}]))))
+
+
+(defn subscribe
+  "Yields async-channel that returns [err result] when subscribing was successful.
+
+  `err` is a keyword indicating what went wrong, or nil when all is
+  fine.  
+  `result` is a map like {:chan channel}
+"
+  [client topic-filter]
+  (<err-> client
+          connect
+          (subscribe* topic-filter)))
 
 
 (defn disconnect
