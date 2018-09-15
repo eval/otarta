@@ -93,7 +93,7 @@
   - {[:a] nil} does *not* match {} (cause there's no :a)
 
   You can provide a predicate:
-  - {[:a :b] (partial < 3)} matches {:a {:b 2}}
+  - {[:a :b] odd?} matches {:a {:b 3}}
 "
   [matchers]
   (let [matches-all? (fn [matchers pkt]
@@ -107,21 +107,13 @@
 
 
 (defn capture-first-packet
-  "Yield promise-chan with xf that filters packet to capture from ch.
-  Example matchers:
-  - {[:a :b] 2} matches {:a {:b 2}}
-
-  You can provide a predicate:
-  - {[:a :b] (partial < 3)} matches {:a {:b 2}}
-"
+  "Typically used with xf via `packet-filter`."
   [ch xf]
   (tap-ch ch (async/promise-chan xf)))
 
 
 (defn capture-all-packets
-  "Yield chan with xf that filters packets to capture from ch.
-  Example matchers:
-  - {[:a :b] 2} matches a packet like {:a {:b 2}}"
+  "Typically used with xf via `packet-filter`."
   [ch xf]
   (tap-ch ch (async/chan (async/sliding-buffer 1) xf)))
 
