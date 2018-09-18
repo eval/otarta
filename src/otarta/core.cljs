@@ -38,16 +38,6 @@
       (assoc :password (:password parsed)))))
 
 
-(defn publish-pkt->msg [{{:keys [retain? dup? qos]} :first-byte
-                         {topic :topic}             :remaining-bytes
-                         {payload :payload}         :extra}]
-  {:dup?      dup?
-   :payload   payload
-   :qos       qos
-   :retained? retain?
-   :topic     topic})
-
-
 (defn topic-filter-matches-topic? [topic-filter topic]
   (let [re        (re-pattern (str "^"
                                    (-> topic-filter
@@ -249,16 +239,24 @@
    :json otarta-fmt/json})
 
 
-(defn payload-reader [format]
-  (let [fmt    (get payload-formats format format)
-        reader (fn [{pl :payload :as msg}]
-                 (let [fmt-payload (try
-                                     (otarta-fmt/read fmt pl)
-                                     (catch js/Error _
-                                       (error :payload-reader "failed for format" format)
-                                       nil))]
-                   (assoc msg :payload fmt-payload)))]
-    (map reader)))
+(defn- subscription-chan [source topic-filter payload-reader]
+  (let [pkts-for-topic-filter (packet-filter
+                               {[:remaining-bytes :topic]
+                                (partial topic-filter-matches-topic? topic-filter)})
+        pkt->msg              (fn [{{:keys [retain? dup? qos]} :first-byte
+                                    {topic :topic}             :remaining-bytes
+                                    {payload :payload}         :extra}]
+                                {:dup?      dup?
+                                 :payload   payload
+                                 :qos       qos
+                                 :retained? retain?
+                                 :topic     topic})
+        try-reading           #(try (payload-reader %) (catch js/Error _))
+        format-payload        #(update % :payload try-reading)
+        subscription-xf       (comp pkts-for-topic-filter
+                                    (map pkt->msg)
+                                    (map format-payload))]
+    (capture-all-packets source subscription-xf)))
 
 
 (defn- subscribe*
@@ -266,16 +264,15 @@
   (info :subscribe :topic-filter topic-filter)
   (go
     (let [{:keys [sink source]} @stream
-          pkt-filter  (packet-filter {[:remaining-bytes :topic]
-                                      (partial topic-filter-matches-topic? topic-filter)})
-          result-chan (capture-all-packets source (comp pkt-filter
-                                                        (map publish-pkt->msg)
-                                                        (payload-reader format)))
-          sub-pkt     (packet/subscribe {:topic-filter      topic-filter
-                                         :packet-identifier 1})
-          next-suback (capture-first-packet source
-                                            (packet-filter {[:first-byte :type] :suback}))
-          [err {{{:keys [max-qos failure?] :as sub-result} :payload} :remaining-bytes}]
+          format-reader         (partial otarta-fmt/read (get payload-formats format format))
+          sub-pkt               (packet/subscribe {:topic-filter      topic-filter
+                                                   :packet-identifier 1})
+          next-suback           (capture-first-packet source
+                                                      (packet-filter {[:first-byte :type] :suback}))
+          ;; ensure sub-ch exists before waiting for suback
+          ;; as broker (may) send(s) messages before sending suback
+          sub-ch                (subscription-chan source topic-filter format-reader)
+          [err {{{:keys [_max-qos failure?] :as sub-result} :payload} :remaining-bytes}]
           (<! (send-and-await-response sub-pkt sink next-suback))]
       (if err
         (error :subscribe err)
@@ -283,7 +280,7 @@
       (cond
         err      [err nil]
         failure? [:broker-refused-sub nil]
-        :else    [nil {:chan result-chan}]))))
+        :else    [nil {:ch sub-ch}]))))
 
 
 (defn subscribe

@@ -19,7 +19,7 @@
   (go
     (reset! client (mqtt/client {:broker-url broker-url :keep-alive 60}))
 
-    (let [[err {sub-ch :chan}] (<! (mqtt/subscribe @client topic-filter))]
+    (let [[err {sub-ch :ch}] (<! (mqtt/subscribe @client topic-filter {:format :string}))]
       (if err
         (do (error err) (println (str "Could not subscribe: " err)))
         (go-loop []

@@ -1,7 +1,7 @@
 (ns otarta.packet
   (:require [clojure.set :refer [index]]
             [goog.crypt :as crypt]
-            [huon.log :as log]
+            [huon.log :refer [debug info warn error]]
             [octet.core :as buf]
             [octet.spec :as spec]
             [otarta.octet-spec :as octet-spec]))
@@ -96,7 +96,9 @@
            (some? packet-identifier))
          (or (string? payload)
              (.-byteLength payload))]}
-  (let [pl (if (string? payload)
+  (let [payload-string? (string? payload)
+        _ (info :publish :payload-string? payload-string?)
+        pl (if (string? payload)
              (.from js/Uint8Array (crypt/stringToUtf8ByteArray payload))
              payload)]
     {:first-byte      {:type :publish :dup?    dup?

@@ -1,8 +1,14 @@
 (ns otarta.core-test
+  (:require-macros
+   [cljs.core.async.macros :refer [go go-loop]])
   (:require
+   [cljs.core.async :as async :refer [<! >! take! put! chan]]
    [cljs.test :refer [deftest is testing are]]
-   [otarta.test-helpers :as helpers :refer [sub?]]
-   [otarta.core :as sut]))
+   [goog.crypt :as crypt]
+   [otarta.core :as sut]
+   [otarta.format :as fmt]
+   [otarta.packet :as pkt]
+   [otarta.test-helpers :as helpers :refer [test-async sub?]]))
 
 
 (deftest parse-broker-url-test
@@ -29,12 +35,12 @@
       "foo/+"       "foo/one"       true
       "foo/+"       "foo"           false
       "foo/+/hello" "foo/bar/hello" true
+      "+/b/c"       "a/b/c"         true
 
       ;; Hash
       "foo/#" "foo/bar"      true
       "foo/#" "foo/bar/moar" true
       "foo/#" "foo"          true ;; !!
-      "+/b/c" "a/b/c"        true
 
       ;; broker-internal topics
       "$SYS/#"     "$SYS/broker/load/publish/sent/15min" true
@@ -65,3 +71,70 @@
       {[:a] odd?}          {:a 2} false
       {[:a] (partial < 3)} {:a 4} true
       {[:a] (partial < 3)} {:a 3} false)))
+
+
+(defn received-packet [pkt-fn & args]
+  (->> args
+       (apply pkt-fn)
+       (pkt/encode)
+       (.-buffer)
+       (pkt/decode)))
+
+
+(deftest subscription-chan-test
+  (let [publish!          (fn [source topic msg]
+                            (put! source (received-packet pkt/publish
+                                                          {:topic topic :payload msg})))
+        subscribe!        #(sut/subscription-chan %1 %2 (partial fmt/read %3))
+        messages-received (fn [ch]
+                            (async/close! ch)
+                            (async/into [] ch))
+        payloads-received #(go (map :payload (<! (messages-received %))))
+        topics-received   #(go (map :topic (<! (messages-received %))))]
+
+    (testing "only receive messages matching the topic-filter"
+      (let [source      (async/chan)
+            foo-sub     (subscribe! source "foo/+" fmt/raw)
+            not-foo-sub (subscribe! source "not-foo/#" fmt/raw)]
+        (publish! source "foo/bar"      "for foo")
+        (publish! source "not-foo/bar"  "for not-foo")
+        (publish! source "foo/baz"      "foo foo")
+        (publish! source "not-foo/bar/baz"  "for not-foo")
+
+
+        (test-async (go
+                      (is (= ["foo/bar" "foo/baz"]
+                             (<! (topics-received foo-sub))))))
+        (test-async (go
+                      (is (= ["not-foo/bar" "not-foo/bar/baz"]
+                             (<! (topics-received not-foo-sub))))))))
+
+    (testing "payload-formatter is applied"
+      (let [source     (async/chan)
+            string-sub (subscribe! source "foo/string" fmt/string)
+            json-sub   (subscribe! source "foo/json" fmt/json)
+            edn-sub    (subscribe! source "foo/edn" fmt/edn)]
+        (publish! source "foo/string" "just a string")
+        (publish! source "foo/json" "{\"a\":1}")
+        (publish! source "foo/edn"  "[1 #_2 3]")
+
+        (test-async (go
+                      (is (= ["just a string"]
+                             (-> string-sub payloads-received <!)))))
+        (test-async (go
+                      (is (= [{"a" 1}]
+                             (-> json-sub payloads-received <!)))))
+        (test-async (go
+                      (is (= [[1 3]]
+                             (-> edn-sub payloads-received <!)))))))
+
+    (testing "payload is nil when formatter fails"
+      (let [source   (async/chan)
+            json-sub (subscribe! source "foo/json" fmt/json)]
+        (publish! source "foo/json" "{\"a\":1}")
+        (publish! source "foo/json"  "not valid json")
+        (publish! source "foo/json"  "[1, 2, 3]")
+
+        (test-async (go
+                      (is (= [{"a" 1} nil [1,2,3]]
+                             (-> json-sub payloads-received <!)))))))))
