@@ -247,6 +247,7 @@
                                     {topic :topic}             :remaining-bytes
                                     {payload :payload}         :extra}]
                                 {:dup?      dup?
+                                 :empty?    (-> payload .-byteLength zero?)
                                  :payload   payload
                                  :qos       qos
                                  :retained? retain?

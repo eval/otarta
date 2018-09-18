@@ -17,13 +17,14 @@
 (defn handle-sub [broker-url topic-filter]
   (info :handle-sub :broker-url broker-url :topic-filter topic-filter)
   (go
-    (reset! client (mqtt/client {:broker-url broker-url :keep-alive 60}))
+    (reset! client (mqtt/client {:broker-url broker-url}))
 
-    (let [[err {sub-ch :ch}] (<! (mqtt/subscribe @client topic-filter {:format :string}))]
+    (let [[err {sub-ch :ch}] (<! (mqtt/subscribe @client topic-filter {:format :json}))]
       (if err
         (do (error err) (println (str "Could not subscribe: " err)))
         (go-loop []
-          (when-let [{:keys [payload]} (<! sub-ch)]
+          (when-let [{:keys [payload empty?] :as m} (<! sub-ch)]
+            (info :message-received :payload-present? (some? payload) :empty? empty? :msg m)
             (when payload (println payload))
             (recur)))))))
 

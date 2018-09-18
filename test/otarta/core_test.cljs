@@ -6,10 +6,12 @@
    [cljs.test :refer [deftest is testing are]]
    [goog.crypt :as crypt]
    [otarta.core :as sut]
+   [huon.log :as log :refer [debug info warn error]]
    [otarta.format :as fmt]
    [otarta.packet :as pkt]
    [otarta.test-helpers :as helpers :refer [test-async sub?]]))
 
+#_(log/enable!)
 
 (deftest parse-broker-url-test
   (testing "contains :ws-url"
@@ -81,7 +83,7 @@
        (pkt/decode)))
 
 
-(deftest subscription-chan-test
+(deftest ^:focus subscription-chan-test
   (let [publish!          (fn [source topic msg]
                             (put! source (received-packet pkt/publish
                                                           {:topic topic :payload msg})))
@@ -91,6 +93,17 @@
                             (async/into [] ch))
         payloads-received #(go (map :payload (<! (messages-received %))))
         topics-received   #(go (map :topic (<! (messages-received %))))]
+
+    (testing "inactive subscribers don't block source nor active subscribers"
+      (let [source       (async/chan)
+            inactive-sub (subscribe! source "foo/+" fmt/raw)
+            active-sub   (subscribe! source "foo/+" fmt/raw)]
+
+        (dotimes [_ 5]
+          (publish! source "foo/bar" "hello"))
+
+        (test-async (go
+                      (is (= 5 (count (<! (topics-received active-sub)))))))))
 
     (testing "only receive messages matching the topic-filter"
       (let [source      (async/chan)
@@ -137,4 +150,16 @@
 
         (test-async (go
                       (is (= [{"a" 1} nil [1,2,3]]
-                             (-> json-sub payloads-received <!)))))))))
+                             (-> json-sub payloads-received <!)))))))
+
+    (testing "message: nil or \"\" yield :empty? true"
+         (let [source (async/chan)
+               sub    (subscribe! source "+" fmt/json)]
+           (publish! source "empty" "")
+           (publish! source "empty" nil)
+           (publish! source "not-empty"  "[\"valid json\"]")
+           (publish! source "not-empty"  "invalid json, but still not empty?")
+
+           (test-async (go
+                         (is (= [true true false false]
+                                (->> sub messages-received <! (map :empty?))))))))))
