@@ -13,8 +13,8 @@
   - you don't have take the null-message (\"\") into account
   - an error should be thrown when reading/writings fails (or would write non-readable data),
   this signals to the caller that the formatting failed."
-  (read [formatter arraybuffer])
-  (write [formatter value]))
+  (read [format arraybuffer])
+  (write [format value]))
 
 
 (def raw
