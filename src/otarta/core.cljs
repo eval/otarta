@@ -27,10 +27,17 @@
 
 
 (def payload-formats
-  {:edn otarta-fmt/edn
-   :raw otarta-fmt/raw
-   :string otarta-fmt/string
-   :json otarta-fmt/json})
+  {:edn     otarta-fmt/edn
+   :raw     otarta-fmt/raw
+   :string  otarta-fmt/string
+   :transit otarta-fmt/transit
+   :json    otarta-fmt/json})
+
+
+(defn- find-payload-format [fmt]
+  (if (satisfies? otarta-fmt/PayloadFormat fmt)
+    fmt
+    (get payload-formats fmt)))
 
 
 (defn parse-broker-url [url]
@@ -233,16 +240,17 @@
 (defn- publish* [{stream :stream :as client} topic msg {:keys [format] :or {format :string}}]
   (info :publish :client client :topic topic :msg msg :format format)
   (go
-    (let [pl-format        (get payload-formats format format)
-          payload-writer   (partial otarta-fmt/write pl-format)
-          [err to-publish] (err-> {:topic topic :payload msg}
-                                  (format-publish-payload payload-writer))]
-      (if err
-        (do (error :publish :format format :error err) [err nil])
-        (let [pkt (packet/publish to-publish)]
-          (info :publish* {:pkt pkt})
-          (>! (-> stream deref :sink) pkt)
-          [nil {}])))))
+    (if-let [pl-format (find-payload-format format)]
+      (let   [payload-writer   (partial otarta-fmt/write pl-format)
+              [err to-publish] (err-> {:topic topic :payload msg}
+                                      (format-publish-payload payload-writer))]
+        (if err
+          (do (error :publish :format format :error err) [err nil])
+          (let [pkt (packet/publish to-publish)]
+            (info :publish* {:pkt pkt})
+            (>! (-> stream deref :sink) pkt)
+            [nil {}])))
+      [:unkown-format nil])))
 
 
 (defn publish
@@ -290,24 +298,26 @@
   [{stream :stream :as client} topic-filter {:keys [format] :or {format :string}}]
   (info :subscribe :topic-filter topic-filter)
   (go
-    (let [{:keys [sink source]} @stream
-          format-reader         (partial otarta-fmt/read (get payload-formats format format))
-          sub-pkt               (packet/subscribe {:topic-filter      topic-filter
-                                                   :packet-identifier 1})
-          next-suback           (capture-first-packet source
-                                                      (packet-filter {[:first-byte :type] :suback}))
-          ;; ensure sub-ch exists before waiting for suback
-          ;; as broker (may) send(s) messages before sending suback
-          sub-ch                (subscription-chan source topic-filter format-reader)
-          [err {{{:keys [_max-qos failure?] :as sub-result} :payload} :remaining-bytes}]
-          (<! (send-and-await-response sub-pkt sink next-suback))]
-      (if err
-        (error :subscribe err)
-        (info :subscribe :sub-result sub-result))
-      (cond
-        err      [err nil]
-        failure? [:broker-refused-sub nil]
-        :else    [nil {:ch sub-ch}]))))
+    (if-let [fmt (find-payload-format format)]
+      (let [{:keys [sink source]} @stream
+            format-reader         (partial otarta-fmt/read fmt)
+            sub-pkt               (packet/subscribe {:topic-filter      topic-filter
+                                                     :packet-identifier 1})
+            next-suback           (capture-first-packet source
+                                                        (packet-filter {[:first-byte :type] :suback}))
+            ;; ensure sub-ch exists before waiting for suback
+            ;; as broker (may) send(s) messages before sending suback
+            sub-ch                (subscription-chan source topic-filter format-reader)
+            [err {{{:keys [_max-qos failure?] :as sub-result} :payload} :remaining-bytes}]
+            (<! (send-and-await-response sub-pkt sink next-suback))]
+        (if err
+          (error :subscribe err)
+          (info :subscribe :sub-result sub-result))
+        (cond
+          err      [err nil]
+          failure? [:broker-refused-sub nil]
+          :else    [nil {:ch sub-ch}]))
+      [:unknown-format nil])))
 
 
 (defn subscribe

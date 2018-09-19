@@ -34,7 +34,7 @@
   (go
     (reset! client (mqtt/client {:broker-url broker-url}))
 
-    (let [[err _] (<! (mqtt/publish @client topic msg {:format :string}))]
+    (let [[err _] (<! (mqtt/publish @client topic msg {:format :bla}))]
       (when err
         (error err)
         (println (str "Could not publish: " err)))
