@@ -19,7 +19,7 @@
   (go
     (reset! client (mqtt/client {:broker-url broker-url}))
 
-    (let [[err {sub-ch :ch}] (<! (mqtt/subscribe @client topic-filter {:format :json}))]
+    (let [[err {sub-ch :ch}] (<! (mqtt/subscribe @client topic-filter {:format :string}))]
       (if err
         (do (error err) (println (str "Could not subscribe: " err)))
         (go-loop []
@@ -34,7 +34,7 @@
   (go
     (reset! client (mqtt/client {:broker-url broker-url}))
 
-    (let [[err _] (<! (mqtt/publish @client topic msg))]
+    (let [[err _] (<! (mqtt/publish @client topic msg {:format :string}))]
       (when err
         (error err)
         (println (str "Could not publish: " err)))

@@ -82,7 +82,7 @@
        (.-buffer)
        (pkt/decode)))
 
-
+;; TODO custom reader
 (deftest ^:focus subscription-chan-test
   (let [publish!          (fn [source topic msg]
                             (put! source (received-packet pkt/publish
@@ -163,3 +163,22 @@
            (test-async (go
                          (is (= [true true false false]
                                 (->> sub messages-received <! (map :empty?))))))))))
+
+
+(deftest format-publish-payload
+  (testing "sending null-message: yields \"\""
+    (let [fut #(second
+                (sut/format-publish-payload {:topic "" :payload %1} (constantly "error!")))]
+      (is (= "" (fut "")))
+      (is (= "" (fut nil)))))
+
+  (testing "formatting payload: success"
+    (let [fut #(sut/format-publish-payload {:topic "" :payload %1} %2)]
+      (is (sub? {:payload "formatted!"}
+                (second (fut "please format" (constantly "formatted!")))))))
+
+  (testing "formatting payload: error"
+    (let [fut #(sut/format-publish-payload {:topic "" :payload %1} %2)]
+      (is (sub? [:payload-writing-error]
+                (fut "please format" #(assert false)))))
+))

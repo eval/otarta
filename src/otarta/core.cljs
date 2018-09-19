@@ -10,7 +10,7 @@
    [lambdaisland.uri :as uri]
    [otarta.format :as otarta-fmt]
    [otarta.packet :as packet]
-   [otarta.util :as util :refer-macros [<err->]]))
+   [otarta.util :as util :refer-macros [<err-> err->]]))
 
 
 (def mqtt-format
@@ -24,6 +24,13 @@
     (write [_ v]
       (info :mqtt-format :write v)
       (js/Uint8Array. (.-buffer (packet/encode v))))))
+
+
+(def payload-formats
+  {:edn otarta-fmt/edn
+   :raw otarta-fmt/raw
+   :string otarta-fmt/string
+   :json otarta-fmt/json})
 
 
 (defn parse-broker-url [url]
@@ -212,12 +219,30 @@
               (start-pinger)))))
 
 
-(defn- publish* [client topic msg]
-  (info :publish :client client :topic topic :msg msg)
+(defn- format-publish-payload [{pl :payload :as all} payload-writer]
+  (let [empty-msg? (or (nil? pl) (= pl ""))]
+    (if empty-msg?
+      [nil ""]
+      (try
+        [nil (update all :payload payload-writer)]
+        (catch js/Error _
+          (error :payload-writing-error)
+          [:payload-writing-error nil])))))
+
+
+(defn- publish* [{stream :stream :as client} topic msg {:keys [format] :or {format :string}}]
+  (info :publish :client client :topic topic :msg msg :format format)
   (go
-    (let [pkt (packet/publish {:topic topic :payload msg})]
-      (>! (-> client :stream deref :sink) pkt)
-      [nil {}])))
+    (let [pl-format        (get payload-formats format format)
+          payload-writer   (partial otarta-fmt/write pl-format)
+          [err to-publish] (err-> {:topic topic :payload msg}
+                                  (format-publish-payload payload-writer))]
+      (if err
+        (do (error :publish :format format :error err) [err nil])
+        (let [pkt (packet/publish to-publish)]
+          (info :publish* {:pkt pkt})
+          (>! (-> stream deref :sink) pkt)
+          [nil {}])))))
 
 
 (defn publish
@@ -226,17 +251,11 @@
   Currently `err` is always nil as no check is done whether the
   underlying connection is active, nor whether the broker received
   the message (ie qos 0)."
-  [client topic msg]
-  (<err-> client
-          connect
-          (publish* topic msg)))
-
-
-(def payload-formats
-  {:edn otarta-fmt/edn
-   :raw otarta-fmt/raw
-   :string otarta-fmt/string
-   :json otarta-fmt/json})
+  ([client topic msg] (publish client topic msg {}))
+  ([client topic msg opts]
+   (<err-> client
+           connect
+           (publish* topic msg opts))))
 
 
 (defn- subscription-chan [source topic-filter payload-reader]
@@ -252,7 +271,12 @@
                                  :qos       qos
                                  :retained? retain?
                                  :topic     topic})
-        try-reading           #(try (payload-reader %) (catch js/Error _))
+        try-reading           #(try
+                                 (info :reading-payload {:payload %})
+                                 (payload-reader %)
+                                 (catch js/Error _
+                                   (error :reading-payload)
+                                   nil))
         format-payload        #(update % :payload try-reading)
         subscription-xf       (comp pkts-for-topic-filter
                                     (map pkt->msg)

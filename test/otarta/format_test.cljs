@@ -12,7 +12,7 @@
   #(->> % (sut/write fmt) (sut/read fmt)))
 
 
-(deftest string-test
+#_(deftest string-test
   (let [fut (write-and-read sut/string)]
     (are [value] (= value (fut value))
       "MQTT"
@@ -21,7 +21,7 @@
 )))
 
 
-(deftest json-test
+#_(deftest json-test
   (testing "reading"
     (are [buff expected] (= expected (sut/read sut/json buff))
       #js [123 34 97 34 58 49 125]

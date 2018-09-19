@@ -219,6 +219,7 @@
 ;;;; read & write
 
 (defn encode [pkt]
+  (info :encode {:pkt pkt})
   (let [{:keys [first-byte remaining-bytes]} (encode-spec pkt)
         remaining-bytes-spec                 (apply buf/spec remaining-bytes)
         remaining-length                     (buf/size remaining-bytes-spec)
@@ -229,6 +230,7 @@
         data                                 (-> pkt
                                                  (assoc-in [:first-byte :type] packet-type-value)
                                                  (assoc :remaining-length remaining-length))]
+    (info :encode {:data data})
     (buf/into
      (buf/spec :first-byte first-byte
                :remaining-length (octet-spec/variable-byte-integer remaining-length)
