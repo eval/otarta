@@ -199,3 +199,33 @@
       (is (sub? [:payload-writing-error]
                 (fut "please format" #(assert false)))))
 ))
+
+
+#_(deftest construct-reader-test
+  (let [[_ reader] (sut/construct-reader :json)]
+    (is (= 1 (reader {:empty? true
+                      :payload (.from js/Uint8Array #js [123 34 97 34 58 49 125])})))))
+
+(deftest construct-formatter-test
+  (let [[_ reader] (sut/construct-formatter :json :read)
+        [_ writer] (sut/construct-formatter :json :write)
+        [err _]    (sut/construct-formatter :bla :write)]
+    (is (= err :bla))
+    (is (= {:empty? false :payload {"a" 1}}
+           (reader {:empty?  false
+                    :payload (.from js/Uint8Array  #js [123,34,97,34,58,49,125])})))
+    (is (= 1 (writer {:empty?  false
+                      :payload {:a 1}})))))
+
+(deftest construct-formatter2-test
+  (let [reader1 (partial fmt/read (sut/construct-formatter2 :json :read))
+        reader (sut/construct-formatter2 :json :read)
+        #_#_[_ writer] (sut/construct-formatter :json :write)
+        err (sut/construct-formatter2 :bla :write)]
+    (is (nil? err))
+    #_(is (= reader "bla"))
+    (is (= {:empty? false :payload {"a" 1}}
+           (reader {:empty?  false
+                    :payload (.from js/Uint8Array  #js [123,34,97,34,58,49,125])})))
+    #_(is (= 1 (writer {:empty?  false
+                      :payload {:a 1}})))))

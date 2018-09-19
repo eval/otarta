@@ -10,7 +10,7 @@
   "Implement read and write operation for reading and writing data to MQTT.
 
   When implementing these functions keep in mind that:
-  - you don't have take the null-message (\"\") into account
+  - you don't have take the empty-message (\"\") into account
   - an error should be thrown when reading/writings fails (or would write non-readable data),
   this signals to the caller that the formatting failed."
   (read [format arraybuffer])

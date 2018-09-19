@@ -35,9 +35,10 @@
 
 
 (defn- find-payload-format [fmt]
-  (if (satisfies? otarta-fmt/PayloadFormat fmt)
-    fmt
-    (get payload-formats fmt)))
+  (second (cond
+     (satisfies? otarta-fmt/PayloadFormat fmt) [nil fmt]
+     (contains? payload-formats fmt) [nil (get payload-formats fmt)]
+     :else [:unknown-format nil])))
 
 
 (defn parse-broker-url [url]
@@ -240,6 +241,16 @@ When writer-fn fails [err nil] is returned. Else [nil updated-all]."
           [:payload-writing-error nil])))))
 
 
+
+;; steps (read and write):
+;; - :json
+;; - vind-format
+;; - maak writer/reader
+;;   - partial fmt/read-or-write fmt
+;;   - wrapped in try
+;;   - bypassing via empty
+;; - pas toe op {:topic ... :payload ...}
+
 (defn- publish* [{stream :stream :as client} topic msg {:keys [format] :or {format :string}}]
   (info :publish :client client :topic topic :msg msg :format format)
   (go
@@ -268,6 +279,28 @@ When writer-fn fails [err nil] is returned. Else [nil updated-all]."
            connect
            (publish* topic msg opts))))
 
+
+(defn construct-formatter [format read-write]
+  (let [rw             (if (= read-write :read) otarta-fmt/read otarta-fmt/write)
+        make-rw-fn     #(vector nil (partial rw %))
+        wrap-rw-fn     #(vector nil (fn [payload]
+                                      (try (% payload) (catch js/Error _))))
+        make-formatter #(vector nil (fn [{e? :empty? :as msg}]
+                                      (update msg :payload (if e? (constantly "") %))))]
+    (err-> format
+           (find-payload-format)
+           (make-rw-fn)
+           (wrap-rw-fn)
+           (make-formatter))))
+
+(defn construct-formatter2 [format read-write]
+  (let [rw (if (= read-write :read) otarta-fmt/read otarta-fmt/write)]
+    (some-> format
+            (find-payload-format)
+            (#(fn [{e? :empty? :as msg}]
+                (let [try-format (fn [v] (try (rw % v) (catch js/Error _)))
+                      update-fn  (if e? (constantly "") try-format)]
+                  (update msg :payload update-fn)))))))
 
 (defn- subscription-chan [source topic-filter payload-reader]
   (let [pkts-for-topic-filter (packet-filter
