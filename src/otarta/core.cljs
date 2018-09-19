@@ -277,7 +277,9 @@
                                  (catch js/Error _
                                    (error :reading-payload)
                                    nil))
-        format-payload        #(update % :payload try-reading)
+        format-payload        #(if (:empty? %)
+                                 (update % :payload (constantly ""))
+                                 (update % :payload try-reading))
         subscription-xf       (comp pkts-for-topic-filter
                                     (map pkt->msg)
                                     (map format-payload))]

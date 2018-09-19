@@ -77,3 +77,25 @@
     (are [s] (thrown? js/Error (sut/read sut/edn (sut/write sut/string s)))
       "#\"regex\""
       "/nonsense/")))
+
+
+(deftest transit-test
+  (testing "success"
+    (let [fut (write-and-read sut/transit)]
+      (are [value] (= value (fut value))
+        {:a 1}
+        {"a" 1}
+        {"underscored_key" {:a {:b 2}}}
+        {:a {:b {:c ["👽" '(1 2 3)]}}})))
+
+  (testing "writing non-transit"
+    (defrecord Bar [a])
+    (are [s] (thrown? js/Error (sut/write sut/transit s))
+      #"regex"
+      (fn [])
+      (->Bar 1)))
+
+  (testing "reading non-transit"
+    (are [s] (thrown? js/Error (sut/read sut/transit (sut/write sut/string s)))
+      "#\"regex\""
+      "/nonsense/")))
