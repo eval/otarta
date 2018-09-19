@@ -8,7 +8,7 @@
    [haslett.format :as ws-fmt]
    [huon.log :refer [debug info warn error]]
    [lambdaisland.uri :as uri]
-   [otarta.format :as otarta-fmt]
+   [otarta.payload-format :as otarta-fmt]
    [otarta.packet :as packet]
    [otarta.util :as util :refer-macros [<err-> err->]]))
 

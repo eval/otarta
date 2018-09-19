@@ -1,4 +1,4 @@
-(ns otarta.format
+(ns otarta.payload-format
   (:require
    [cljs.reader :as reader]
    [cognitect.transit :as transit]
