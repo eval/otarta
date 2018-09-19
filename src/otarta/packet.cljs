@@ -93,17 +93,14 @@
                                                              retain? false}}]
   {:pre [(if (zero? qos)
            (nil? packet-identifier)
-           (some? packet-identifier))]}
-  (let [payload (if (nil? payload) "" payload)
-        pl      (if (string? payload)
-                  (.from js/Uint8Array (crypt/stringToUtf8ByteArray payload))
-                  payload)]
-    {:first-byte      {:type :publish :dup?    dup?
-                       :qos  qos      :retain? retain?}
-     :remaining-bytes (cond-> {:topic    topic
-                               :payload  pl}
-                        packet-identifier
-                        (assoc :packet-identifier packet-identifier))}))
+           (some? packet-identifier))
+         (= js/Uint8Array (type  payload))]}
+  {:first-byte      {:type :publish :dup?    dup?
+                     :qos  qos      :retain? retain?}
+   :remaining-bytes (cond-> {:topic    topic
+                             :payload  payload}
+                      packet-identifier
+                      (assoc :packet-identifier packet-identifier))})
 
 
 (defmethod encode-spec :publish [{{:keys [topic payload]} :remaining-bytes

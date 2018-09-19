@@ -62,7 +62,7 @@
         [52 18 0 10 115 111 109 101 47 116 111 112 105 99 0 1 77 81 84 84]
 
         ;; strings are converted
-        {:topic "some/topic" :payload "MQTT"}
+        {:topic "some/topic" :payload (.from js/Uint8Array [77 81 84 84])}
         [48 16 0 10 115 111 109 101 47 116 111 112 105 99 77 81 84 84]
 
 ))))

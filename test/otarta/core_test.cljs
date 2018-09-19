@@ -81,9 +81,11 @@
                                (pkt/encode)
                                (.-buffer)
                                (pkt/decode)))
+      str->int8array    #(.from js/Uint8Array (crypt/stringToUtf8ByteArray %))
       publish!          (fn [source topic msg]
                           (put! source (received-packet pkt/publish
-                                                        {:topic topic :payload msg})))
+                                                        {:topic   topic
+                                                         :payload (str->int8array msg)})))
       subscribe!        #(sut/subscription-chan %1 %2 (partial fmt/read %3))
       messages-received (fn [ch]
                           (async/close! ch)
@@ -168,16 +170,15 @@
                              (-> json-sub payloads-received <!))))))))
 
   (deftest subscription-chan-test5
-    (testing "message: nil or \"\" yield :empty? true"
+    (testing "message: empty \"\" yields :empty? true"
       (let [source (async/chan)
             sub    (subscribe! source "+" fmt/json)]
         (publish! source "empty" "")
-        (publish! source "empty" nil)
         (publish! source "not-empty"  "[\"valid json\"]")
         (publish! source "not-empty"  "invalid json, but still not empty?")
 
         (test-async (go
-                      (is (= [true true false false]
+                      (is (= [true false false]
                              (->> sub messages-received <! (map :empty?))))))))))
 
 

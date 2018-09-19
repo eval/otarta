@@ -226,7 +226,10 @@
               (start-pinger)))))
 
 
-(defn- format-publish-payload [{pl :payload :as all} payload-writer]
+(defn- format-publish-payload
+  "Applies function `payload-writer` to payload if payload is not empty.
+When writer-fn fails [err nil] is returned. Else [nil updated-all]."
+  [{pl :payload :as all} payload-writer]
   (let [empty-msg? (or (nil? pl) (= pl ""))]
     (if empty-msg?
       [nil ""]
