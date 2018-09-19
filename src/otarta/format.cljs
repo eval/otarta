@@ -12,10 +12,8 @@
 
 (def raw
   (reify PayloadFormat
-    (read [_ arraybuffer]
-      arraybuffer)
-    (write [_ value]
-      value)))
+    (read [_ buff] buff)
+    (write [_ v] v)))
 
 
 (def string
@@ -25,6 +23,7 @@
       (crypt/utf8ByteArrayToString arraybuffer))
     (write [_ value]
       (info :write-string {:value value})
+      (assert (string? value))
       (.from js/Uint8Array (crypt/stringToUtf8ByteArray value)))))
 
 
@@ -49,6 +48,9 @@
         (reader/read-string s)))
     (write [_ value]
       (info :write-edn {:value value})
-      (->> value prn-str (write string)))))
+      (let [to-write  (prn-str value)
+            readable? (partial reader/read-string)]
+        (readable? to-write)
+        (write string to-write)))))
 
 #_(prn (write edn #"some regex"))
