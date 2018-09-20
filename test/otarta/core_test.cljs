@@ -76,13 +76,16 @@
       {[:a] (partial < 3)} {:a 3} false)))
 
 
+(defn str->int8array [s]
+  (.from js/Uint8Array (crypt/stringToUtf8ByteArray s)))
+
+
 (let [received-packet   (fn [pkt-fn & args]
                           (->> args
                                (apply pkt-fn)
                                (pkt/encode)
                                (.-buffer)
                                (pkt/decode)))
-      str->int8array    #(.from js/Uint8Array (crypt/stringToUtf8ByteArray %))
       publish!          (fn [source topic msg]
                           (put! source (received-packet pkt/publish
                                                         {:topic   topic
@@ -202,6 +205,42 @@
 ))
 
 
+(deftest gen-formatter-test
+  (testing "unknown format"
+    (is (= [:unkown-format nil]
+           (sut/generate-payload-formatter :read :foo))))
+
+  (testing "custom format"
+    (let [fmt  (reify fmt/PayloadFormat
+                 (read [_ _] "READ")
+                 (write [_ _] "WRITTEN"))
+          [_ rfut] (sut/generate-payload-formatter :read fmt)
+          [_ wfut] (sut/generate-payload-formatter :write fmt)]
+      (is (sub? [nil {:payload "READ"}]
+                (rfut {:payload []})))
+      (is (sub? [nil {:payload "WRITTEN"}]
+                (wfut {:payload ""})))))
+
+
+  (testing "bypasses requested format for :empty?"
+    (let [[_ rfut] (sut/generate-payload-formatter :read :json)
+          [_ wfut] (sut/generate-payload-formatter :write :json)]
+      (is (sub? [nil {:payload ""}]
+                (rfut {:empty?  true
+                       :payload (.from js/Uint8Array #js [1 2 3 4])})))
+      (is (.equals goog.object (js/Uint8Array.)
+                   (:payload (second (wfut {:empty?  true
+                                            :payload nil})))))))
+
+  (testing "yields :error when formatter fails"
+    (let [[_ read-json] (sut/generate-payload-formatter :read :json)
+          [_ write-edn] (sut/generate-payload-formatter :write :edn)]
+      (is (sub? [:format-error]
+                (read-json {:payload (str->int8array "all but json")})))
+      (is (sub? [:format-error]
+                (write-edn {:payload #"no edn"})))
+)))
+
 #_(deftest construct-reader-test
   (let [[_ reader] (sut/construct-reader :json)]
     (is (= 1 (reader {:empty? true
@@ -218,7 +257,7 @@
     (is (= 1 (writer {:empty?  false
                       :payload {:a 1}})))))
 
-(deftest construct-formatter2-test
+#_(deftest construct-formatter2-test
   (let [reader1 (partial fmt/read (sut/construct-formatter2 :json :read))
         reader (sut/construct-formatter2 :json :read)
         #_#_[_ writer] (sut/construct-formatter :json :write)
@@ -231,7 +270,7 @@
     #_(is (= 1 (writer {:empty?  false
                       :payload {:a 1}})))))
 
-(deftest while-not-thread-first-test
+#_(deftest while-not-thread-first-test
   (let [foo (fn [a] [nil (inc a)])]
     (testing "it works"
       (is (= 2 (while-> 1 odd?
