@@ -35,6 +35,7 @@
 
 
 (defn- find-payload-format [fmt]
+  (info :find-payload-format :fmt fmt)
   (cond
     (satisfies? otarta-fmt/PayloadFormat fmt) fmt
     (contains? payload-formats fmt)           (get payload-formats fmt)))
@@ -235,7 +236,9 @@
           formatter (fn [{e? :empty? :as to-send}]
                       (info :formatter)
                       (let [try-format        #(try (rw payload-format %)
-                                                    (catch js/Error _))
+                                                    (catch js/Error _
+                                                      (error :format-error)
+                                                      nil))
                             update-fn         (if e? (partial rw empty-fmt) try-format)
                             formatted-payload (-> to-send :payload update-fn)]
                         (if (nil? formatted-payload)

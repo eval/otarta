@@ -77,7 +77,7 @@
 
 
 (defn str->int8array [s]
-  (.from js/Uint8Array (crypt/stringToUtf8ByteArray s)))
+  (js/Uint8Array. (crypt/stringToUtf8ByteArray s)))
 
 
 (let [received-packet   (fn [pkt-fn & args]
@@ -91,9 +91,10 @@
                                                         {:empty?  (= msg "")
                                                          :topic   topic
                                                          :payload (str->int8array msg)})))
-      subscribe!        #(err->> %3
-                                 (sut/generate-payload-formatter :read)
-                                 (sut/subscription-chan %1 %2))
+      subscribe!        #(-> %3
+                             (err->> (sut/generate-payload-formatter :read)
+                                     (sut/subscription-chan %1 %2))
+                             second)
       messages-received (fn [ch]
                           (async/close! ch)
                           (async/into [] ch))
@@ -102,9 +103,9 @@
 
   (deftest subscription-chan-test0
     (testing "inactive subscribers don't block source nor active subscribers"
-      (let [source           (async/chan)
-            [_ inactive-sub] (subscribe! source "foo/+" fmt/raw)
-            [_ active-sub]   (subscribe! source "foo/+" fmt/raw)]
+      (let [source       (async/chan)
+            inactive-sub (subscribe! source "foo/+" fmt/raw)
+            active-sub   (subscribe! source "foo/+" fmt/raw)]
 
         (dotimes [_ 5]
           (publish! source "foo/bar" "hello"))
@@ -114,9 +115,9 @@
 
   (deftest subscription-chan-test2
     (testing "receive messages according to topic-filter"
-      (let [source          (async/chan)
-            [_ foo-sub]     (subscribe! source "foo/+" :raw)
-            [_ not-foo-sub] (subscribe! source "not-foo/#" :raw)]
+      (let [source      (async/chan)
+            foo-sub     (subscribe! source "foo/+" :raw)
+            not-foo-sub (subscribe! source "not-foo/#" :raw)]
         (publish! source "foo/bar"      "for foo")
         (publish! source "not-foo/bar"  "for not-foo")
         (publish! source "foo/baz"      "foo foo")
@@ -131,13 +132,15 @@
 
   (deftest subscription-chan-test3
     (testing "payload-formatter is applied"
-      (let [source         (async/chan)
-            [_ string-sub] (subscribe! source "foo/string" :string)
-            [_ json-sub]   (subscribe! source "foo/json" :json)
-            [_ edn-sub]    (subscribe! source "foo/edn" :edn)]
+      (let [source      (async/chan)
+            string-sub  (subscribe! source "foo/string" :string)
+            json-sub    (subscribe! source "foo/json" :json)
+            edn-sub     (subscribe! source "foo/edn" :edn)
+            transit-sub (subscribe! source "foo/transit" :transit)]
         (publish! source "foo/string" "just a string")
         (publish! source "foo/json" "{\"a\":1}")
         (publish! source "foo/edn"  "[1 #_2 3]")
+        (publish! source "foo/transit" "[\"^ \",\"~:a\",1]")
 
         (test-async (go
                       (is (= ["just a string"]
@@ -147,12 +150,15 @@
                              (-> json-sub payloads-received <!)))))
         (test-async (go
                       (is (= [[1 3]]
-                             (-> edn-sub payloads-received <!))))))))
+                             (-> edn-sub payloads-received <!)))))
+        (test-async (go
+                      (is (= [{:a 1}]
+                             (-> transit-sub payloads-received <!))))))))
 
   (deftest subscription-chan-test4
     (testing "messages with payloads that fail the formatter are not received"
-      (let [source  (async/chan)
-            [_ sub] (subscribe! source "foo/json" :json)]
+      (let [source (async/chan)
+            sub    (subscribe! source "foo/json" :json)]
         (publish! source "foo/json" "invalid json")
         (publish! source "foo/json" "[\"valid json\"]")
 
@@ -163,8 +169,8 @@
 
   (deftest subscription-chan-test5
     (testing "message: empty \"\" yields :empty? true"
-      (let [source  (async/chan)
-            [_ sub] (subscribe! source "+" :json)]
+      (let [source (async/chan)
+            sub    (subscribe! source "+" :json)]
         (publish! source "empty" "")
         (publish! source "not-empty"  "[\"valid json\"]")
 
@@ -173,17 +179,17 @@
                              (->> sub messages-received <! (map :empty?))))))))))
 
 
-(deftest gen-formatter-test
+(deftest generate-payload-formatter-test
   (testing "unknown format"
     (is (= [:unkown-format nil]
            (sut/generate-payload-formatter :read :foo))))
 
   (testing "custom format"
-    (let [fmt  (reify fmt/PayloadFormat
-                 (read [_ _] "READ")
-                 (write [_ _] "WRITTEN"))
-          [_ rfut] (sut/generate-payload-formatter :read fmt)
-          [_ wfut] (sut/generate-payload-formatter :write fmt)]
+    (let [my-fmt   (reify fmt/PayloadFormat
+                     (read [_ _] "READ")
+                     (write [_ _] "WRITTEN"))
+          [_ rfut] (sut/generate-payload-formatter :read my-fmt)
+          [_ wfut] (sut/generate-payload-formatter :write my-fmt)]
       (is (sub? [nil {:payload "READ"}]
                 (rfut {:payload []})))
       (is (sub? [nil {:payload "WRITTEN"}]

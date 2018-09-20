@@ -69,10 +69,12 @@ This makes writing records impossible."
   "Read and write data encoded in transit+json."
   (reify PayloadFormat
     (read  [_ buff]
+      (info :read-transit)
       (->> buff
            (read string)
            (transit/read (transit/reader :json))))
     (write [_ v]
+      (info :write-transit)
       (->> v
            (transit/write (transit/writer :json))
            (write string)))))
