@@ -7,7 +7,7 @@
    [goog.crypt :as crypt]
    [huon.log :as log :refer [debug info warn error]]
    [otarta.core :as sut]
-   [otarta.payload-format :as fmt]
+   [otarta.payload-format :as payload-fmt :refer [PayloadFormat]]
    [otarta.packet :as pkt]
    [otarta.util :refer-macros [err-> err->>]]
    [otarta.test-helpers :as helpers :refer [test-async sub?]]))
@@ -104,8 +104,8 @@
   (deftest subscription-chan-test0
     (testing "inactive subscribers don't block source nor active subscribers"
       (let [source       (async/chan)
-            inactive-sub (subscribe! source "foo/+" fmt/raw)
-            active-sub   (subscribe! source "foo/+" fmt/raw)]
+            inactive-sub (subscribe! source "foo/+" :raw)
+            active-sub   (subscribe! source "foo/+" :raw)]
 
         (dotimes [_ 5]
           (publish! source "foo/bar" "hello"))
@@ -185,7 +185,7 @@
            (sut/generate-payload-formatter :read :foo))))
 
   (testing "custom format"
-    (let [my-fmt   (reify fmt/PayloadFormat
+    (let [my-fmt   (reify PayloadFormat
                      (read [_ _] "READ")
                      (write [_ _] "WRITTEN"))
           [_ rfut] (sut/generate-payload-formatter :read my-fmt)

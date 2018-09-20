@@ -8,7 +8,7 @@
    [haslett.format :as ws-fmt]
    [huon.log :refer [debug info warn error]]
    [lambdaisland.uri :as uri]
-   [otarta.payload-format :as otarta-fmt]
+   [otarta.payload-format :as payload-fmt :refer [PayloadFormat]]
    [otarta.packet :as packet]
    [otarta.util :as util :refer-macros [<err-> err-> err->>]]))
 
@@ -27,17 +27,17 @@
 
 
 (def payload-formats
-  {:edn     otarta-fmt/edn
-   :raw     otarta-fmt/raw
-   :string  otarta-fmt/string
-   :transit otarta-fmt/transit
-   :json    otarta-fmt/json})
+  {:edn     payload-fmt/edn
+   :raw     payload-fmt/raw
+   :string  payload-fmt/string
+   :transit payload-fmt/transit
+   :json    payload-fmt/json})
 
 
 (defn- find-payload-format [fmt]
   (info :find-payload-format :fmt fmt)
   (cond
-    (satisfies? otarta-fmt/PayloadFormat fmt) fmt
+    (satisfies? PayloadFormat fmt) fmt
     (contains? payload-formats fmt)           (get payload-formats fmt)))
 
 
@@ -229,8 +229,8 @@
 
 (defn generate-payload-formatter [read-write format]
   (if-let [payload-format (find-payload-format format)]
-    (let [rw        (get {:read otarta-fmt/read :write otarta-fmt/write} read-write)
-          empty-fmt (reify otarta-fmt/PayloadFormat
+    (let [rw        (get {:read payload-fmt/read :write payload-fmt/write} read-write)
+          empty-fmt (reify PayloadFormat
                       (read [_ _] "")
                       (write [_ _] (js/Uint8Array.)))
           formatter (fn [{e? :empty? :as to-send}]
