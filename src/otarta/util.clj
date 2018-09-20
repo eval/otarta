@@ -58,7 +58,7 @@
                                      (not (first ~placeholder))
                                      (~threading second ~expr))))))
 
-(defmacro ^:private while-*
+#_(defmacro ^:private while-*
   "Internal, use err-> or err->>."
   [threading init test & exprs]
   (let [placeholder (gensym)]
@@ -67,32 +67,32 @@
                                      (~test ~placeholder)
                                      (~@threading ~expr))))))
 
-(defmacro while-not->
+#_(defmacro while-not->
   [test x & forms]
   `(while-* (->) ~x (complement ~test) ~@forms))
 
 
-(defmacro while-not->>
+#_(defmacro while-not->>
   [x test & forms]
   `(while-* (->>) ~x (complement ~test) ~@forms))
 
 
-(defmacro while->
+#_(defmacro while->
   [x test & forms]
   `(while-* (->) ~x ~test ~@forms))
 
 
-(defmacro while->>
+#_(defmacro while->>
   [x test & forms]
   `(while-* (->>) ~x ~test ~@forms))
 
 
-(defmacro err2->
+#_(defmacro err2->
   [x & forms]
   `(while-* (-> second) [nil ~x] (complement first) ~@forms))
 
 
-(defmacro err2->>
+#_(defmacro err2->>
   [x & forms]
   `(while-* (->> second) [nil ~x] (complement first) ~@forms))
 
@@ -110,7 +110,7 @@
   `(err-* -> [nil ~x] ~@forms))
 
 
-#_(defmacro err->>
+(defmacro err->>
   "Threads the expr through the forms. Inserts x as the last item in
   the first form, making a list of it if it is not a list already. If
   there are more forms, inserts the first form as the second item in

@@ -23,9 +23,10 @@
       (if err
         (do (error err) (println (str "Could not subscribe: " err)))
         (go-loop []
+          ;; TODO dist. between empty?/verbose when printing?
           (when-let [{:keys [payload empty?] :as m} (<! sub-ch)]
             (info :message-received :payload-present? (some? payload) :empty? empty? :msg m)
-            (when payload (println payload))
+            (println payload)
             (recur)))))))
 
 

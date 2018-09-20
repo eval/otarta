@@ -10,7 +10,7 @@
    [lambdaisland.uri :as uri]
    [otarta.payload-format :as otarta-fmt]
    [otarta.packet :as packet]
-   [otarta.util :as util :refer-macros [<err-> err->]]))
+   [otarta.util :as util :refer-macros [<err-> err-> err->>]]))
 
 
 (def mqtt-format
@@ -227,30 +227,6 @@
               (start-pinger)))))
 
 
-(defn- format-publish-payload
-  "Applies function `payload-writer` to payload if payload is not empty.
-When writer-fn fails [err nil] is returned. Else [nil updated-all]."
-  [{pl :payload :as all} payload-writer]
-  (let [empty-msg? (or (nil? pl) (= pl ""))]
-    (if empty-msg?
-      [nil ""]
-      (try
-        [nil (update all :payload payload-writer)]
-        (catch js/Error _
-          (error :payload-writing-error)
-          [:payload-writing-error nil])))))
-
-
-
-;; steps (read and write):
-;; - :json
-;; - vind-format
-;; - maak writer/reader
-;;   - partial fmt/read-or-write fmt
-;;   - wrapped in try
-;;   - bypassing via empty
-;; - pas toe op {:topic ... :payload ...}
-
 (defn generate-payload-formatter [read-write format]
   (if-let [payload-format (find-payload-format format)]
     (let [rw        (get {:read otarta-fmt/read :write otarta-fmt/write} read-write)
@@ -298,7 +274,7 @@ When writer-fn fails [err nil] is returned. Else [nil updated-all]."
            (publish* topic msg opts))))
 
 
-(defn- subscription-chan [source topic-filter payload-reader]
+(defn- subscription-chan [source topic-filter payload-formatter]
   (let [pkts-for-topic-filter (packet-filter
                                {[:remaining-bytes :topic]
                                 (partial topic-filter-matches-topic? topic-filter)})
@@ -311,45 +287,32 @@ When writer-fn fails [err nil] is returned. Else [nil updated-all]."
                                  :qos       qos
                                  :retained? retain?
                                  :topic     topic})
-        try-reading           #(try
-                                 (info :reading-payload {:payload %})
-                                 (payload-reader %)
-                                 (catch js/Error _
-                                   (error :reading-payload)
-                                   nil))
-        format-payload        #(if (:empty? %)
-                                 (update % :payload (constantly ""))
-                                 (update % :payload try-reading))
         subscription-xf       (comp pkts-for-topic-filter
                                     (map pkt->msg)
-                                    (map format-payload))]
-    (capture-all-packets source subscription-xf)))
+                                    (map (comp second payload-formatter))
+                                    (remove nil?))]
+    [nil (capture-all-packets source subscription-xf)]))
 
 
 (defn- subscribe*
   [{stream :stream :as client} topic-filter {:keys [format] :or {format :string}}]
   (info :subscribe :topic-filter topic-filter)
   (go
-    (if-let [fmt (find-payload-format format)]
-      (let [{:keys [sink source]} @stream
-            format-reader         (partial otarta-fmt/read fmt)
-            sub-pkt               (packet/subscribe {:topic-filter      topic-filter
-                                                     :packet-identifier 1})
-            next-suback           (capture-first-packet source
-                                                        (packet-filter {[:first-byte :type] :suback}))
-            ;; ensure sub-ch exists before waiting for suback
-            ;; as broker (may) send(s) messages before sending suback
-            sub-ch                (subscription-chan source topic-filter format-reader)
-            [err {{{:keys [_max-qos failure?] :as sub-result} :payload} :remaining-bytes}]
-            (<! (send-and-await-response sub-pkt sink next-suback))]
-        (if err
-          (error :subscribe err)
-          (info :subscribe :sub-result sub-result))
-        (cond
-          err      [err nil]
-          failure? [:broker-refused-sub nil]
-          :else    [nil {:ch sub-ch}]))
-      [:unknown-format nil])))
+    (let [{:keys [sink source]} @stream
+          [sub-err sub-ch]      (err->> format
+                                        (generate-payload-formatter :read)
+                                        (subscription-chan source topic-filter))
+          sub-pkt               (packet/subscribe {:topic-filter      topic-filter
+                                                   :packet-identifier 1})
+          next-suback           (capture-first-packet source
+                                                      (packet-filter {[:first-byte :type] :suback}))
+          [mqtt-err {{{:keys [_max-qos failure?] :as _sub-result} :payload} :remaining-bytes}]
+          (<! (send-and-await-response sub-pkt sink next-suback))]
+      (cond
+        sub-err  [sub-err nil]
+        mqtt-err [mqtt-err nil]
+        failure? [:broker-refused-sub nil]
+        :else    [nil {:ch sub-ch}]))))
 
 
 (defn subscribe
