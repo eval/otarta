@@ -6,9 +6,9 @@
    [huon.log :as log :refer [debug info warn error]]
    [otarta.payload-format :as sut]))
 
-(println (crypt/stringToUtf8ByteArray "{\"a\":1}"))
 (comment
   ;; handy to create assertions:
+  (println (crypt/stringToUtf8ByteArray "{\"a\":1}"))
   )
 
 

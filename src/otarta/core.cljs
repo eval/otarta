@@ -35,10 +35,9 @@
 
 
 (defn- find-payload-format [fmt]
-  (second (cond
-     (satisfies? otarta-fmt/PayloadFormat fmt) [nil fmt]
-     (contains? payload-formats fmt) [nil (get payload-formats fmt)]
-     :else [:unknown-format nil])))
+  (cond
+    (satisfies? otarta-fmt/PayloadFormat fmt) fmt
+    (contains? payload-formats fmt)           (get payload-formats fmt)))
 
 
 (defn parse-broker-url [url]
@@ -234,6 +233,7 @@
                       (read [_ _] "")
                       (write [_ _] (js/Uint8Array.)))
           formatter (fn [{e? :empty? :as to-send}]
+                      (info :formatter)
                       (let [try-format        #(try (rw payload-format %)
                                                     (catch js/Error _))
                             update-fn         (if e? (partial rw empty-fmt) try-format)
@@ -248,16 +248,15 @@
 (defn- publish* [{stream :stream :as client} topic msg {:keys [format] :or {format :string}}]
   (info :publish :client client :topic topic :msg msg :format format)
   (go
-    (let [{sink :sink}         @stream
-          empty-msg?           (or (nil? msg) (= "" msg))
-          [fmt-err to-publish] (err-> (generate-payload-formatter :write format)
-                                      (apply {:topic topic :payload msg :empty? empty-msg?}))
-          publish!             #(->> %
-                                     (packet/publish)
-                                     (>! sink))]
+    (let [{sink :sink}        @stream
+          empty-msg?          (or (nil? msg) (= "" msg))
+          to-publish          {:topic topic :payload msg :empty? empty-msg?}
+          [fmt-err formatted] (err->> format
+                                     (generate-payload-formatter :write)
+                                     (#(apply % (list to-publish))))]
       (if fmt-err
         [fmt-err nil]
-        (do (publish! to-publish)
+        (do (>! sink (packet/publish formatted))
             [nil {}])))))
 
 
