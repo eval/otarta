@@ -9,6 +9,7 @@
    [otarta.core :as sut]
    [otarta.payload-format :as fmt]
    [otarta.packet :as pkt]
+   [otarta.util :refer-macros [while-> while-not-> err2-> err->]]
    [otarta.test-helpers :as helpers :refer [test-async sub?]]))
 
 #_(log/enable!)
@@ -206,7 +207,7 @@
     (is (= 1 (reader {:empty? true
                       :payload (.from js/Uint8Array #js [123 34 97 34 58 49 125])})))))
 
-(deftest construct-formatter-test
+#_(deftest construct-formatter-test
   (let [[_ reader] (sut/construct-formatter :json :read)
         [_ writer] (sut/construct-formatter :json :write)
         [err _]    (sut/construct-formatter :bla :write)]
@@ -229,3 +230,34 @@
                     :payload (.from js/Uint8Array  #js [123,34,97,34,58,49,125])})))
     #_(is (= 1 (writer {:empty?  false
                       :payload {:a 1}})))))
+
+(deftest while-not-thread-first-test
+  (let [foo (fn [a] [nil (inc a)])]
+    (testing "it works"
+      (is (= 2 (while-> 1 odd?
+                          inc
+                          inc)))
+      (is (= 1 (while-> 1 even?
+                          inc
+                          inc)))
+      (is (= 2 (while-not-> even?
+                 1
+                 inc
+                 inc)))
+      (is (= {:n 2 :error "OMG"}
+             (while-not-> :error
+               {}
+               (assoc :n 1)
+               (update :n inc)
+               (as-> $ (update $ :m (fnil + 0) 10 (:n $)) )
+               (assoc :error "OMG")
+               (assoc :never :added))))
+      #_(is (= 1 (-> 1 (#(inc %)))))
+      (is (= [nil 3]
+             (err2-> 1
+                     foo
+                     (#(vector nil (inc %)))))))))
+
+
+
+#_(println (macroexpand '(err2-> 1)))

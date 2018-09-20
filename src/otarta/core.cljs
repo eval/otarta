@@ -254,6 +254,22 @@ When writer-fn fails [err nil] is returned. Else [nil updated-all]."
 (defn- publish* [{stream :stream :as client} topic msg {:keys [format] :or {format :string}}]
   (info :publish :client client :topic topic :msg msg :format format)
   (go
+    ;; pipeline:
+    ;; - {:format :string}
+    ;; - {:formatter ...} or {:error "unknown format"}
+    ;; - {:topic "" :payload "{"a":1}"} or {:error "error formatting"}
+    ;; - pkt
+
+    (comment
+      (let [empty-msg? (or (nil? msg) (= "" msg))
+            to-send {:topic topic :payload msg :empty? empty-msg?}
+            sink (-> stream deref :sink)]
+        (while-not-> :error
+          {:format format}
+          (construct-formatter2 :write)
+          (-> :formatter (apply to-send))
+          (packet/publish)
+          (#(>! sink %)))))
     (if-let [pl-format (find-payload-format format)]
       (let   [payload-writer   (partial otarta-fmt/write pl-format)
               [err to-publish] (err-> {:topic topic :payload msg}
@@ -293,14 +309,25 @@ When writer-fn fails [err nil] is returned. Else [nil updated-all]."
            (wrap-rw-fn)
            (make-formatter))))
 
-(defn construct-formatter2 [format read-write]
-  (let [rw (if (= read-write :read) otarta-fmt/read otarta-fmt/write)]
-    (some-> format
-            (find-payload-format)
-            (#(fn [{e? :empty? :as msg}]
-                (let [try-format (fn [v] (try (rw % v) (catch js/Error _)))
-                      update-fn  (if e? (constantly "") try-format)]
-                  (update msg :payload update-fn)))))))
+(defn construct-formatter2 [{format :format} read-write]
+  (if-let [payload-format (find-payload-format format)]
+    (let [rw        (if (= read-write :read) otarta-fmt/read otarta-fmt/write)
+          formatter (fn [{e? :empty? :as to-send}]
+                      (let [try-format        #(try (rw payload-format %)
+                                                    (catch js/Error _))
+                            update-fn         (if e? (constantly "") try-format)
+                            formatted-payload (-> to-send :payload update-fn)]
+                        (if (nil? formatted-payload)
+                          (assoc to-send :error :format-error)
+                          (assoc to-send :payload formatted-payload))))]
+      {:formatter formatter}
+      #_(some-> format
+              (find-payload-format)
+              (#(fn [{e? :empty? :as msg}]
+                  (let [try-format (fn [v] (try (rw % v) (catch js/Error _)))
+                        update-fn  (if e? (constantly "") try-format)]
+                    (update msg :payload update-fn))))))
+    {:error :unkown-format}))
 
 (defn- subscription-chan [source topic-filter payload-reader]
   (let [pkts-for-topic-filter (packet-filter
