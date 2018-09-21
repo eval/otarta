@@ -8,7 +8,7 @@
    [octet.core :as buf]
    [octet.spec :as spec]
    [otarta.packet :as sut]
-   [otarta.test-helpers :as helpers :refer [test-async test-within]]))
+   [otarta.test-helpers :as helpers :refer [sub? test-async test-within]]))
 
 
 (defn data->byte-array [data]
@@ -17,7 +17,7 @@
 
 
 (defn byte-array->data [ba]
-  (sut/decode (.-buffer (.from js/Uint8Array ba))))
+  (sut/decode (.-buffer (js/Uint8Array. ba))))
 
 
 (deftest connect-write-spec-test
@@ -53,16 +53,16 @@
     (testing "writes correct bytes"
       (are [input expected] (= expected (data->byte-array (data-fn input)))
         ;; with qos 0, no packet identifier
-        {:topic "some/topic" :payload (.from js/Uint8Array [77 81 84 84])}
+        {:topic "some/topic" :payload (js/Uint8Array. [77 81 84 84])}
         [48 16 0 10 115 111 109 101 47 116 111 112 105 99 77 81 84 84]
 
         ;; if qos 1, then with packet identifier
         {:qos 1 :packet-identifier 1
-         :topic "some/topic" :payload (.from js/Uint8Array [77 81 84 84])}
+         :topic "some/topic" :payload (js/Uint8Array. [77 81 84 84])}
         [52 18 0 10 115 111 109 101 47 116 111 112 105 99 0 1 77 81 84 84]
 
         ;; strings are converted
-        {:topic "some/topic" :payload (.from js/Uint8Array [77 81 84 84])}
+        {:topic "some/topic" :payload (js/Uint8Array. [77 81 84 84])}
         [48 16 0 10 115 111 109 101 47 116 111 112 105 99 77 81 84 84]
 
 ))))

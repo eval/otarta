@@ -49,6 +49,7 @@
   `(cljs.core.async.macros/go (cljs.core.async/<!
                                (<err-* ->> (cljs.core.async.macros/go [nil ~x]) ~@forms))))
 
+
 (defmacro ^:private err-*
   "Internal, use err-> or err->>."
   [threading init & exprs]
@@ -57,44 +58,6 @@
                                   `(cond-> ~placeholder
                                      (not (first ~placeholder))
                                      (~threading second ~expr))))))
-
-#_(defmacro ^:private while-*
-  "Internal, use err-> or err->>."
-  [threading init test & exprs]
-  (let [placeholder (gensym)]
-    `(as-> ~init ~placeholder ~@(for [expr exprs]
-                                  `(cond-> ~placeholder
-                                     (~test ~placeholder)
-                                     (~@threading ~expr))))))
-
-#_(defmacro while-not->
-  [test x & forms]
-  `(while-* (->) ~x (complement ~test) ~@forms))
-
-
-#_(defmacro while-not->>
-  [x test & forms]
-  `(while-* (->>) ~x (complement ~test) ~@forms))
-
-
-#_(defmacro while->
-  [x test & forms]
-  `(while-* (->) ~x ~test ~@forms))
-
-
-#_(defmacro while->>
-  [x test & forms]
-  `(while-* (->>) ~x ~test ~@forms))
-
-
-#_(defmacro err2->
-  [x & forms]
-  `(while-* (-> second) [nil ~x] (complement first) ~@forms))
-
-
-#_(defmacro err2->>
-  [x & forms]
-  `(while-* (->> second) [nil ~x] (complement first) ~@forms))
 
 
 (defmacro err->

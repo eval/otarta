@@ -76,7 +76,7 @@
       {[:a] (partial < 3)} {:a 3} false)))
 
 
-(defn str->int8array [s]
+(defn str->uint8array [s]
   (js/Uint8Array. (crypt/stringToUtf8ByteArray s)))
 
 
@@ -90,7 +90,7 @@
                           (put! source (received-packet pkt/publish
                                                         {:empty?  (= msg "")
                                                          :topic   topic
-                                                         :payload (str->int8array msg)})))
+                                                         :payload (str->uint8array msg)})))
       subscribe!        #(-> %3
                              (err->> (sut/generate-payload-formatter :read)
                                      (sut/subscription-chan %1 %2))
@@ -201,7 +201,7 @@
           [_ wfut] (sut/generate-payload-formatter :write :json)]
       (is (sub? [nil {:payload ""}]
                 (rfut {:empty?  true
-                       :payload (str->int8array "anything")})))
+                       :payload (str->uint8array "anything")})))
       (is (.equals goog.object (js/Uint8Array.)
                    (:payload (second (wfut {:empty?  true
                                             :payload nil})))))))
@@ -211,6 +211,6 @@
     (let [[_ read-json] (sut/generate-payload-formatter :read :json)
           [_ write-edn] (sut/generate-payload-formatter :write :edn)]
       (is (sub? [:format-error]
-                (read-json {:payload (str->int8array "all but json")})))
+                (read-json {:payload (str->uint8array "all but json")})))
       (is (sub? [:format-error]
                 (write-edn {:payload #"no edn"}))))))
