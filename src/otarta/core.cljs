@@ -69,7 +69,6 @@
              (re-find re topic)))))
 
 
-
 (defn send-and-await-response
   ""
   ([pkt sink source]

@@ -55,3 +55,24 @@
       "pub" (apply handle-pub (subvec argsv 1 4))
       "sub" (apply handle-sub (subvec argsv 1 3))
       (println "Usage:\nsub: otarta.main sub <broker-url> <topic-filter> [-d]\npub: otarta.main pub <broker-url> <topic> <msg> [-d]\n"))))
+
+
+(comment
+  (def client (mqtt/client {:broker-url "ws://localhost:9001"}))
+
+  (def sub1 (atom nil))
+
+  (go
+    (let [[err {sub-ch :ch}] (<! (mqtt/subscribe client "a/#" {:format :json}))]
+      (when sub-ch
+        (println "subbed!")
+        (reset! sub1 sub-ch))))
+
+  (go-loop []
+    (when-let [m (<! @sub1)]
+      (prn m)
+      (recur)))
+
+  (mqtt/publish client "a/b" "transit?" {:format :transit})
+
+)
