@@ -1,9 +1,18 @@
 (ns otarta.core-test
+  (:require-macros
+   [cljs.core.async.macros :refer [go go-loop]])
   (:require
-   [cljs.test :refer [deftest is testing are]]
-   [otarta.test-helpers :as helpers :refer [sub?]]
-   [otarta.core :as sut]))
+   [cljs.core.async :as async :refer [<! >! take! put! chan]]
+   [cljs.test :as test :refer [deftest is testing are]]
+   [goog.crypt :as crypt]
+   [huon.log :as log :refer [debug info warn error]]
+   [otarta.core :as sut]
+   [otarta.payload-format :as payload-fmt :refer [PayloadFormat]]
+   [otarta.packet :as pkt]
+   [otarta.util :refer-macros [err-> err->>]]
+   [otarta.test-helpers :as helpers :refer [test-async sub?]]))
 
+#_(log/enable!)
 
 (deftest parse-broker-url-test
   (testing "contains :ws-url"
@@ -29,12 +38,12 @@
       "foo/+"       "foo/one"       true
       "foo/+"       "foo"           false
       "foo/+/hello" "foo/bar/hello" true
+      "+/b/c"       "a/b/c"         true
 
       ;; Hash
       "foo/#" "foo/bar"      true
       "foo/#" "foo/bar/moar" true
       "foo/#" "foo"          true ;; !!
-      "+/b/c" "a/b/c"        true
 
       ;; broker-internal topics
       "$SYS/#"     "$SYS/broker/load/publish/sent/15min" true
@@ -65,3 +74,143 @@
       {[:a] odd?}          {:a 2} false
       {[:a] (partial < 3)} {:a 4} true
       {[:a] (partial < 3)} {:a 3} false)))
+
+
+(defn str->uint8array [s]
+  (js/Uint8Array. (crypt/stringToUtf8ByteArray s)))
+
+
+(let [received-packet   (fn [pkt-fn & args]
+                          (->> args
+                               (apply pkt-fn)
+                               (pkt/encode)
+                               (.-buffer)
+                               (pkt/decode)))
+      publish!          (fn [source topic msg]
+                          (put! source (received-packet pkt/publish
+                                                        {:empty?  (= msg "")
+                                                         :topic   topic
+                                                         :payload (str->uint8array msg)})))
+      subscribe!        #(-> %3
+                             (err->> (sut/generate-payload-formatter :read)
+                                     (sut/subscription-chan %1 %2))
+                             second)
+      messages-received (fn [ch]
+                          (async/close! ch)
+                          (async/into [] ch))
+      payloads-received #(go (map :payload (<! (messages-received %))))
+      topics-received   #(go (map :topic (<! (messages-received %))))]
+
+  (deftest subscription-chan-test0
+    (testing "inactive subscribers don't block source nor active subscribers"
+      (let [source       (async/chan)
+            inactive-sub (subscribe! source "foo/+" :raw)
+            active-sub   (subscribe! source "foo/+" :raw)]
+
+        (dotimes [_ 5]
+          (publish! source "foo/bar" "hello"))
+
+        (test-async (go
+                      (is (= 5 (count (<! (topics-received active-sub))))))))))
+
+  (deftest subscription-chan-test2
+    (testing "receive messages according to topic-filter"
+      (let [source      (async/chan)
+            foo-sub     (subscribe! source "foo/+" :raw)
+            not-foo-sub (subscribe! source "not-foo/#" :raw)]
+        (publish! source "foo/bar"      "for foo")
+        (publish! source "not-foo/bar"  "for not-foo")
+        (publish! source "foo/baz"      "foo foo")
+        (publish! source "not-foo/bar/baz"  "for not-foo")
+
+        (test-async (go
+                      (is (= ["foo/bar" "foo/baz"]
+                             (<! (topics-received foo-sub))))))
+        (test-async (go
+                      (is (= ["not-foo/bar" "not-foo/bar/baz"]
+                             (<! (topics-received not-foo-sub)))))))))
+
+  (deftest subscription-chan-test3
+    (testing "payload-formatter is applied"
+      (let [source      (async/chan)
+            string-sub  (subscribe! source "foo/string" :string)
+            json-sub    (subscribe! source "foo/json" :json)
+            edn-sub     (subscribe! source "foo/edn" :edn)
+            transit-sub (subscribe! source "foo/transit" :transit)]
+        (publish! source "foo/string" "just a string")
+        (publish! source "foo/json" "{\"a\":1}")
+        (publish! source "foo/edn"  "[1 #_2 3]")
+        (publish! source "foo/transit" "[\"^ \",\"~:a\",1]")
+
+        (test-async (go
+                      (is (= ["just a string"]
+                             (-> string-sub payloads-received <!)))))
+        (test-async (go
+                      (is (= [{"a" 1}]
+                             (-> json-sub payloads-received <!)))))
+        (test-async (go
+                      (is (= [[1 3]]
+                             (-> edn-sub payloads-received <!)))))
+        (test-async (go
+                      (is (= [{:a 1}]
+                             (-> transit-sub payloads-received <!))))))))
+
+  (deftest subscription-chan-test4
+    (testing "messages with payloads that fail the formatter are not received"
+      (let [source (async/chan)
+            sub    (subscribe! source "foo/json" :json)]
+        (publish! source "foo/json" "invalid json")
+        (publish! source "foo/json" "[\"valid json\"]")
+
+        (test-async (go
+                      (is (= 1
+                             (count (-> sub payloads-received <!)))))))))
+
+
+  (deftest subscription-chan-test5
+    (testing "message: empty \"\" yields :empty? true"
+      (let [source (async/chan)
+            sub    (subscribe! source "+" :json)]
+        (publish! source "empty" "")
+        (publish! source "not-empty"  "[\"valid json\"]")
+
+        (test-async (go
+                      (is (= [true false]
+                             (->> sub messages-received <! (map :empty?))))))))))
+
+
+(deftest generate-payload-formatter-test
+  (testing "unknown format"
+    (is (= [:unkown-format nil]
+           (sut/generate-payload-formatter :read :foo))))
+
+  (testing "custom format"
+    (let [my-fmt   (reify PayloadFormat
+                     (read [_ _] "READ")
+                     (write [_ _] "WRITTEN"))
+          [_ rfut] (sut/generate-payload-formatter :read my-fmt)
+          [_ wfut] (sut/generate-payload-formatter :write my-fmt)]
+      (is (sub? [nil {:payload "READ"}]
+                (rfut {:payload []})))
+      (is (sub? [nil {:payload "WRITTEN"}]
+                (wfut {:payload ""})))))
+
+
+  (testing "bypasses requested format for :empty?"
+    (let [[_ rfut] (sut/generate-payload-formatter :read :json)
+          [_ wfut] (sut/generate-payload-formatter :write :json)]
+      (is (sub? [nil {:payload ""}]
+                (rfut {:empty?  true
+                       :payload (str->uint8array "anything")})))
+      (is (.equals goog.object (js/Uint8Array.)
+                   (:payload (second (wfut {:empty?  true
+                                            :payload nil})))))))
+
+
+  (testing "yields :error when formatter fails"
+    (let [[_ read-json] (sut/generate-payload-formatter :read :json)
+          [_ write-edn] (sut/generate-payload-formatter :write :edn)]
+      (is (sub? [:format-error]
+                (read-json {:payload (str->uint8array "all but json")})))
+      (is (sub? [:format-error]
+                (write-edn {:payload #"no edn"}))))))

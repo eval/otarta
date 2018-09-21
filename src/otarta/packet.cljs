@@ -1,7 +1,7 @@
 (ns otarta.packet
   (:require [clojure.set :refer [index]]
             [goog.crypt :as crypt]
-            [huon.log :as log]
+            [huon.log :refer [debug info warn error]]
             [octet.core :as buf]
             [octet.spec :as spec]
             [otarta.octet-spec :as octet-spec]))
@@ -94,21 +94,18 @@
   {:pre [(if (zero? qos)
            (nil? packet-identifier)
            (some? packet-identifier))
-         (or (string? payload)
-             (.-byteLength payload))]}
-  (let [pl (if (string? payload)
-             (.from js/Uint8Array (crypt/stringToUtf8ByteArray payload))
-             payload)]
-    {:first-byte      {:type :publish :dup?    dup?
-                       :qos  qos      :retain? retain?}
-     :remaining-bytes (cond-> {:topic    topic
-                               :payload  pl}
-                        packet-identifier
-                        (assoc :packet-identifier packet-identifier))}))
+         (= js/Uint8Array (type  payload))]}
+  {:first-byte      {:type :publish :dup?    dup?
+                     :qos  qos      :retain? retain?}
+   :remaining-bytes (cond-> {:topic    topic
+                             :payload  payload}
+                      packet-identifier
+                      (assoc :packet-identifier packet-identifier))})
 
 
 (defmethod encode-spec :publish [{{:keys [topic payload]} :remaining-bytes
                                   {:keys [qos]}           :first-byte}]
+  (info :encode-spec :topic topic :payload payload)
   {:first-byte      (octet-spec/bitmask {:type [4 4]
                                          :dup? [3 1 :bool] :qos [2 2] :retain? [0 1 :bool]})
    :remaining-bytes (cond-> [:topic (octet-spec/utf8-encoded-string topic)]
@@ -219,6 +216,7 @@
 ;;;; read & write
 
 (defn encode [pkt]
+  (info :encode {:pkt pkt})
   (let [{:keys [first-byte remaining-bytes]} (encode-spec pkt)
         remaining-bytes-spec                 (apply buf/spec remaining-bytes)
         remaining-length                     (buf/size remaining-bytes-spec)
@@ -229,6 +227,7 @@
         data                                 (-> pkt
                                                  (assoc-in [:first-byte :type] packet-type-value)
                                                  (assoc :remaining-length remaining-length))]
+    (info :encode {:data data})
     (buf/into
      (buf/spec :first-byte first-byte
                :remaining-length (octet-spec/variable-byte-integer remaining-length)

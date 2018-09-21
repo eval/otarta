@@ -17,14 +17,16 @@
 (defn handle-sub [broker-url topic-filter]
   (info :handle-sub :broker-url broker-url :topic-filter topic-filter)
   (go
-    (reset! client (mqtt/client {:broker-url broker-url :keep-alive 10}))
+    (reset! client (mqtt/client {:broker-url broker-url}))
 
-    (let [[err {sub-ch :chan}] (<! (mqtt/subscribe @client topic-filter))]
+    (let [[err {sub-ch :ch}] (<! (mqtt/subscribe @client topic-filter {:format :string}))]
       (if err
         (do (error err) (println (str "Could not subscribe: " err)))
         (go-loop []
-          (when-let [m (<! sub-ch)]
-            (prn (assoc m :payload (crypt/byteArrayToString (:payload m))))
+          ;; TODO dist. between empty?/verbose when printing?
+          (when-let [{:keys [payload empty?] :as m} (<! sub-ch)]
+            (info :message-received m)
+            (println payload)
             (recur)))))))
 
 
@@ -33,7 +35,7 @@
   (go
     (reset! client (mqtt/client {:broker-url broker-url}))
 
-    (let [[err _] (<! (mqtt/publish @client topic msg))]
+    (let [[err _] (<! (mqtt/publish @client topic msg {:format :string}))]
       (when err
         (error err)
         (println (str "Could not publish: " err)))
@@ -53,3 +55,24 @@
       "pub" (apply handle-pub (subvec argsv 1 4))
       "sub" (apply handle-sub (subvec argsv 1 3))
       (println "Usage:\nsub: otarta.main sub <broker-url> <topic-filter> [-d]\npub: otarta.main pub <broker-url> <topic> <msg> [-d]\n"))))
+
+
+(comment
+  (def client (mqtt/client {:broker-url "ws://localhost:9001"}))
+
+  (def sub1 (atom nil))
+
+  (go
+    (let [[err {sub-ch :ch}] (<! (mqtt/subscribe client "a/#" {:format :json}))]
+      (when sub-ch
+        (println "subbed!")
+        (reset! sub1 sub-ch))))
+
+  (go-loop []
+    (when-let [m (<! @sub1)]
+      (prn m)
+      (recur)))
+
+  (mqtt/publish client "a/b" "transit?" {:format :transit})
+
+)

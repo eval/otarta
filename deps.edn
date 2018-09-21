@@ -21,9 +21,10 @@
   ;; application
   funcool/octet          {:mvn/version "1.1.1"}
   haslett                {:local/root "vendor/haslett" :deps/manifest :deps}
-  lambdaisland/uri       {:mvn/version "1.1.0"}}
+  lambdaisland/uri       {:mvn/version "1.1.0"}
   org.clojure/core.async {:mvn/version "0.4.474"}
   org.harto/huon         {:mvn/version "0.5.0"}
+  com.cognitect/transit-cljs {:mvn/version "0.8.256"}}
 
  :aliases
  {:test       {:extra-deps {olical/cljs-test-runner {:mvn/version "2.1.0"}}

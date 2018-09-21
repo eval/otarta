@@ -48,3 +48,39 @@
   [x & forms]
   `(cljs.core.async.macros/go (cljs.core.async/<!
                                (<err-* ->> (cljs.core.async.macros/go [nil ~x]) ~@forms))))
+
+
+(defmacro ^:private err-*
+  "Internal, use err-> or err->>."
+  [threading init & exprs]
+  (let [placeholder (gensym)]
+    `(as-> ~init ~placeholder ~@(for [expr exprs]
+                                  `(cond-> ~placeholder
+                                     (not (first ~placeholder))
+                                     (~threading second ~expr))))))
+
+
+(defmacro err->
+  "Threads the expr through the forms. Inserts x as the
+  second item in the first form, making a list of it if it is not a
+  list already. If there are more forms, inserts the first form as the
+  second item in second form, etc.
+
+  Each form should return a tuple, where the left value is either nil
+  or an error, and the right value is a correct result. Threading
+  stops as soon as a form returns an error."
+  [x & forms]
+  `(err-* -> [nil ~x] ~@forms))
+
+
+(defmacro err->>
+  "Threads the expr through the forms. Inserts x as the last item in
+  the first form, making a list of it if it is not a list already. If
+  there are more forms, inserts the first form as the second item in
+  second form, etc.
+
+  Each form should return a tuple, where the left value is either nil
+  or an error, and the right value is a correct result. Threading
+  stops as soon as a form returns an error."
+  [x & forms]
+  `(err-* ->> [nil ~x] ~@forms))

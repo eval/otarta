@@ -8,8 +8,9 @@
    [haslett.format :as ws-fmt]
    [huon.log :refer [debug info warn error]]
    [lambdaisland.uri :as uri]
+   [otarta.payload-format :as payload-fmt :refer [PayloadFormat]]
    [otarta.packet :as packet]
-   [otarta.util :as util :refer-macros [<err->]]))
+   [otarta.util :as util :refer-macros [<err-> err-> err->>]]))
 
 
 (def mqtt-format
@@ -25,6 +26,21 @@
       (js/Uint8Array. (.-buffer (packet/encode v))))))
 
 
+(def payload-formats
+  {:edn     payload-fmt/edn
+   :raw     payload-fmt/raw
+   :string  payload-fmt/string
+   :transit payload-fmt/transit
+   :json    payload-fmt/json})
+
+
+(defn- find-payload-format [fmt]
+  (info :find-payload-format :fmt fmt)
+  (cond
+    (satisfies? PayloadFormat fmt)  fmt
+    (contains? payload-formats fmt) (get payload-formats fmt)))
+
+
 (defn parse-broker-url [url]
   (let [parsed     (uri/parse url)
         ws-url-map (select-keys parsed [:scheme :host :port :path])
@@ -35,16 +51,6 @@
 
       (:password parsed)
       (assoc :password (:password parsed)))))
-
-
-(defn publish-pkt->msg [{{:keys [retain? dup? qos]} :first-byte
-                         {topic :topic}             :remaining-bytes
-                         {payload :payload}         :extra}]
-  {:dup?      dup?
-   :payload   payload
-   :qos       qos
-   :retained? retain?
-   :topic     topic})
 
 
 (defn topic-filter-matches-topic? [topic-filter topic]
@@ -61,7 +67,6 @@
     (or (nil? topic)
         (and (re-find dollar-re topic-filter)
              (re-find re topic)))))
-
 
 
 (defn send-and-await-response
@@ -115,7 +120,7 @@
 (defn capture-all-packets
   "Typically used with xf via `packet-filter`."
   [ch xf]
-  (tap-ch ch (async/chan (async/sliding-buffer 1) xf)))
+  (tap-ch ch (async/chan (async/sliding-buffer 1024) xf)))
 
 
 (defn stream-connected? [stream]
@@ -221,12 +226,40 @@
               (start-pinger)))))
 
 
-(defn- publish* [client topic msg]
-  (info :publish :client client :topic topic :msg msg)
+(defn generate-payload-formatter [read-write format]
+  (if-let [payload-format (find-payload-format format)]
+    (let [rw        (get {:read payload-fmt/read :write payload-fmt/write} read-write)
+          empty-fmt (reify PayloadFormat
+                      (read [_ _] "")
+                      (write [_ _] (js/Uint8Array.)))
+          formatter (fn [{e? :empty? :as to-send}]
+                      (info :formatter)
+                      (let [try-format        #(try (rw payload-format %)
+                                                    (catch js/Error _
+                                                      (error :format-error)
+                                                      nil))
+                            update-fn         (if e? (partial rw empty-fmt) try-format)
+                            formatted-payload (-> to-send :payload update-fn)]
+                        (if (nil? formatted-payload)
+                          [:format-error nil]
+                          [nil (assoc to-send :payload formatted-payload)])))]
+      [nil formatter])
+    [:unkown-format nil]))
+
+
+(defn- publish* [{stream :stream :as client} topic msg {:keys [format] :or {format :string}}]
+  (info :publish :client client :topic topic :msg msg :format format)
   (go
-    (let [pkt (packet/publish {:topic topic :payload msg})]
-      (>! (-> client :stream deref :sink) pkt)
-      [nil {}])))
+    (let [{sink :sink}        @stream
+          empty-msg?          (or (nil? msg) (= "" msg))
+          to-publish          {:topic topic :payload msg :empty? empty-msg?}
+          [fmt-err formatted] (err->> format
+                                     (generate-payload-formatter :write)
+                                     (#(apply % (list to-publish))))]
+      (if fmt-err
+        [fmt-err nil]
+        (do (>! sink (packet/publish formatted))
+            [nil {}])))))
 
 
 (defn publish
@@ -235,34 +268,52 @@
   Currently `err` is always nil as no check is done whether the
   underlying connection is active, nor whether the broker received
   the message (ie qos 0)."
-  [client topic msg]
-  (<err-> client
-          connect
-          (publish* topic msg)))
+  ([client topic msg] (publish client topic msg {}))
+  ([client topic msg opts]
+   (<err-> client
+           connect
+           (publish* topic msg opts))))
+
+
+(defn- subscription-chan [source topic-filter payload-formatter]
+  (let [pkts-for-topic-filter (packet-filter
+                               {[:remaining-bytes :topic]
+                                (partial topic-filter-matches-topic? topic-filter)})
+        pkt->msg              (fn [{{:keys [retain? dup? qos]} :first-byte
+                                    {topic :topic}             :remaining-bytes
+                                    {payload :payload}         :extra}]
+                                {:dup?      dup?
+                                 :empty?    (-> payload .-byteLength zero?)
+                                 :payload   payload
+                                 :qos       qos
+                                 :retained? retain?
+                                 :topic     topic})
+        subscription-xf       (comp pkts-for-topic-filter
+                                    (map pkt->msg)
+                                    (map (comp second payload-formatter))
+                                    (remove nil?))]
+    [nil (capture-all-packets source subscription-xf)]))
 
 
 (defn- subscribe*
-  [{stream :stream :as client} topic-filter]
+  [{stream :stream :as client} topic-filter {:keys [format] :or {format :string}}]
   (info :subscribe :topic-filter topic-filter)
   (go
     (let [{:keys [sink source]} @stream
-
-          pkt-filter  (packet-filter {[:remaining-bytes :topic]
-                                      (partial topic-filter-matches-topic? topic-filter)})
-          result-chan (capture-all-packets source (comp pkt-filter (map publish-pkt->msg)))
-          sub-pkt     (packet/subscribe {:topic-filter      topic-filter
-                                         :packet-identifier 1})
-          next-suback (capture-first-packet source
-                                            (packet-filter {[:first-byte :type] :suback}))
-          [err {{{:keys [max-qos failure?] :as sub-result} :payload} :remaining-bytes}]
+          [sub-err sub-ch]      (err->> format
+                                        (generate-payload-formatter :read)
+                                        (subscription-chan source topic-filter))
+          sub-pkt               (packet/subscribe {:topic-filter      topic-filter
+                                                   :packet-identifier 1})
+          next-suback           (capture-first-packet source
+                                                      (packet-filter {[:first-byte :type] :suback}))
+          [mqtt-err {{{:keys [_max-qos failure?] :as _sub-result} :payload} :remaining-bytes}]
           (<! (send-and-await-response sub-pkt sink next-suback))]
-      (if err
-        (error :subscribe err)
-        (info :subscribe :sub-result sub-result))
       (cond
-        err      [err nil]
+        sub-err  [sub-err nil]
+        mqtt-err [mqtt-err nil]
         failure? [:broker-refused-sub nil]
-        :else    [nil {:chan result-chan}]))))
+        :else    [nil {:ch sub-ch}]))))
 
 
 (defn subscribe
@@ -272,10 +323,11 @@
   fine.  
   `result` is a map like {:chan channel}
 "
-  [client topic-filter]
-  (<err-> client
-          connect
-          (subscribe* topic-filter)))
+  ([client topic-filter] (subscribe client topic-filter {}))
+  ([client topic-filter opts]
+   (<err-> client
+           connect
+           (subscribe* topic-filter opts))))
 
 
 (defn disconnect
