@@ -25,7 +25,7 @@
         (go-loop []
           ;; TODO dist. between empty?/verbose when printing?
           (when-let [{:keys [payload empty?] :as m} (<! sub-ch)]
-            (info :message-received :payload-present? (some? payload) :empty? empty? :msg m)
+            (info :message-received m)
             (println payload)
             (recur)))))))
 
