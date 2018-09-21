@@ -37,8 +37,8 @@
 (defn- find-payload-format [fmt]
   (info :find-payload-format :fmt fmt)
   (cond
-    (satisfies? PayloadFormat fmt) fmt
-    (contains? payload-formats fmt)           (get payload-formats fmt)))
+    (satisfies? PayloadFormat fmt)  fmt
+    (contains? payload-formats fmt) (get payload-formats fmt)))
 
 
 (defn parse-broker-url [url]
