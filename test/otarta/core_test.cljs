@@ -24,7 +24,13 @@
     (are [broker-url creds] (sub? creds (sut/parse-broker-url broker-url))
       "ws://user@host/path"           {:username "user"}
       "ws://user:some-pass@host/path" {:username "user"}
-      "ws://user:password@host/path"  {:password "password"})))
+      "ws://user:password@host/path"  {:password "password"}))
+
+  (testing "contains :root-topic"
+    (are [broker-url root-topic] (= root-topic (:root-topic (sut/parse-broker-url broker-url)))
+      "ws://user@host/path#foo"                       "foo"
+      "ws://user:some-pass@host/path#some/root/topic" "some/root/topic"
+      "ws://user:some-pass@host/path#"                nil)))
 
 
 (deftest topic-filter-matches-topic?-test

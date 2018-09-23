@@ -50,7 +50,10 @@
       (assoc :username (:user parsed))
 
       (:password parsed)
-      (assoc :password (:password parsed)))))
+      (assoc :password (:password parsed))
+
+      (-> parsed :fragment (string/blank?) not)
+      (assoc :root-topic (:fragment parsed)))))
 
 
 (defn topic-filter-matches-topic? [topic-filter topic]
