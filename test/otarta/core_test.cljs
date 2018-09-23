@@ -86,6 +86,9 @@
   (js/Uint8Array. (crypt/stringToUtf8ByteArray s)))
 
 
+(defn client-factory [{source :source root-topic :root-topic}]
+  {:stream (atom {:source source}) :config {:root-topic root-topic}})
+
 (let [received-packet   (fn [pkt-fn & args]
                           (->> args
                                (apply pkt-fn)
@@ -110,8 +113,9 @@
   (deftest subscription-chan-test0
     (testing "inactive subscribers don't block source nor active subscribers"
       (let [source       (async/chan)
-            inactive-sub (subscribe! source "foo/+" :raw)
-            active-sub   (subscribe! source "foo/+" :raw)]
+            client       (client-factory {:source source})
+            inactive-sub (subscribe! client "foo/+" :raw)
+            active-sub   (subscribe! client "foo/+" :raw)]
 
         (dotimes [_ 5]
           (publish! source "foo/bar" "hello"))
@@ -122,8 +126,9 @@
   (deftest subscription-chan-test2
     (testing "receive messages according to topic-filter"
       (let [source      (async/chan)
-            foo-sub     (subscribe! source "foo/+" :raw)
-            not-foo-sub (subscribe! source "not-foo/#" :raw)]
+            client      (client-factory {:source source})
+            foo-sub     (subscribe! client "foo/+" :raw)
+            not-foo-sub (subscribe! client "not-foo/#" :raw)]
         (publish! source "foo/bar"      "for foo")
         (publish! source "not-foo/bar"  "for not-foo")
         (publish! source "foo/baz"      "foo foo")
@@ -134,15 +139,28 @@
                              (<! (topics-received foo-sub))))))
         (test-async (go
                       (is (= ["not-foo/bar" "not-foo/bar/baz"]
-                             (<! (topics-received not-foo-sub)))))))))
+                             (<! (topics-received not-foo-sub))))))))
+
+    (testing "root-topic of client are not part of the received topics"
+      (let [source      (async/chan)
+            client      (client-factory {:source source :root-topic "root"})
+            foo-sub     (subscribe! client "root/foo/+" :raw)]
+        (publish! source "root/foo/bar" "for foo")
+        (publish! source "root/foo/baz" "for foo")
+
+        (test-async (go
+                      (is (= ["foo/bar" "foo/baz"]
+                             (<! (topics-received foo-sub)))))))))
+
 
   (deftest subscription-chan-test3
     (testing "payload-formatter is applied"
       (let [source      (async/chan)
-            string-sub  (subscribe! source "foo/string" :string)
-            json-sub    (subscribe! source "foo/json" :json)
-            edn-sub     (subscribe! source "foo/edn" :edn)
-            transit-sub (subscribe! source "foo/transit" :transit)]
+            client      (client-factory {:source source})
+            string-sub  (subscribe! client "foo/string" :string)
+            json-sub    (subscribe! client "foo/json" :json)
+            edn-sub     (subscribe! client "foo/edn" :edn)
+            transit-sub (subscribe! client "foo/transit" :transit)]
         (publish! source "foo/string" "just a string")
         (publish! source "foo/json" "{\"a\":1}")
         (publish! source "foo/edn"  "[1 #_2 3]")
@@ -164,7 +182,8 @@
   (deftest subscription-chan-test4
     (testing "messages with payloads that fail the formatter are not received"
       (let [source (async/chan)
-            sub    (subscribe! source "foo/json" :json)]
+            client (client-factory {:source source})
+            sub    (subscribe! client "foo/json" :json)]
         (publish! source "foo/json" "invalid json")
         (publish! source "foo/json" "[\"valid json\"]")
 
@@ -176,7 +195,8 @@
   (deftest subscription-chan-test5
     (testing "message: empty \"\" yields :empty? true"
       (let [source (async/chan)
-            sub    (subscribe! source "+" :json)]
+            client (client-factory {:source source})
+            sub    (subscribe! client "+" :json)]
         (publish! source "empty" "")
         (publish! source "not-empty"  "[\"valid json\"]")
 

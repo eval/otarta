@@ -278,8 +278,21 @@
            (publish* topic msg opts))))
 
 
-(defn- subscription-chan [source topic-filter payload-formatter]
-  (let [pkts-for-topic-filter (packet-filter
+(defn- app-topic->broker-topic [{{root-topic :root-topic} :config} app-topic]
+  (if root-topic
+    (str root-topic "/" app-topic)
+    app-topic))
+
+
+(defn- broker-topic->app-topic [{{root-topic :root-topic} :config} broker-topic]
+  (if root-topic
+    (string/replace broker-topic (re-pattern (str "^" root-topic "/")) "")
+    broker-topic))
+
+
+(defn- subscription-chan [{stream :stream :as client} topic-filter payload-formatter]
+  (let [{source :source} @stream
+        pkts-for-topic-filter (packet-filter
                                {[:remaining-bytes :topic]
                                 (partial topic-filter-matches-topic? topic-filter)})
         pkt->msg              (fn [{{:keys [retain? dup? qos]} :first-byte
@@ -290,7 +303,7 @@
                                  :payload   payload
                                  :qos       qos
                                  :retained? retain?
-                                 :topic     topic})
+                                 :topic     (broker-topic->app-topic client topic)})
         subscription-xf       (comp pkts-for-topic-filter
                                     (map pkt->msg)
                                     (map (comp second payload-formatter))
@@ -299,13 +312,14 @@
 
 
 (defn- subscribe*
-  [{stream :stream :as client} topic-filter {:keys [format] :or {format :string}}]
-  (info :subscribe :topic-filter topic-filter)
+  [{stream :stream :as client} app-topic-filter {:keys [format] :or {format :string}}]
+  (info :subscribe :app-topic-filter app-topic-filter)
   (go
     (let [{:keys [sink source]} @stream
+          topic-filter          (app-topic->broker-topic client app-topic-filter)
           [sub-err sub-ch]      (err->> format
                                         (generate-payload-formatter :read)
-                                        (subscription-chan source topic-filter))
+                                        (subscription-chan client topic-filter))
           sub-pkt               (packet/subscribe {:topic-filter      topic-filter
                                                    :packet-identifier 1})
           next-suback           (capture-first-packet source
