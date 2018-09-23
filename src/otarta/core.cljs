@@ -41,6 +41,18 @@
     (contains? payload-formats fmt) (get payload-formats fmt)))
 
 
+(defn- app-topic->broker-topic [{{root-topic :root-topic} :config} app-topic]
+  (if root-topic
+    (str root-topic "/" app-topic)
+    app-topic))
+
+
+(defn- broker-topic->app-topic [{{root-topic :root-topic} :config} broker-topic]
+  (if root-topic
+    (string/replace broker-topic (re-pattern (str "^" root-topic "/")) "")
+    broker-topic))
+
+
 (defn parse-broker-url [url]
   (let [parsed     (uri/parse url)
         ws-url-map (select-keys parsed [:scheme :host :port :path])
@@ -250,15 +262,17 @@
     [:unkown-format nil]))
 
 
-(defn- publish* [{stream :stream :as client} topic msg {:keys [format] :or {format :string}}]
-  (info :publish :client client :topic topic :msg msg :format format)
+(defn- publish* [{stream :stream :as client} app-topic msg {:keys [format] :or {format :string}}]
+  (info :publish :client client :app-topic app-topic :msg msg :format format)
   (go
     (let [{sink :sink}        @stream
           empty-msg?          (or (nil? msg) (= "" msg))
-          to-publish          {:topic topic :payload msg :empty? empty-msg?}
+          to-publish          {:topic   (app-topic->broker-topic client app-topic)
+                               :payload msg
+                               :empty?  empty-msg?}
           [fmt-err formatted] (err->> format
-                                     (generate-payload-formatter :write)
-                                     (#(apply % (list to-publish))))]
+                                      (generate-payload-formatter :write)
+                                      (#(apply % (list to-publish))))]
       (if fmt-err
         [fmt-err nil]
         (do (>! sink (packet/publish formatted))
@@ -276,18 +290,6 @@
    (<err-> client
            connect
            (publish* topic msg opts))))
-
-
-(defn- app-topic->broker-topic [{{root-topic :root-topic} :config} app-topic]
-  (if root-topic
-    (str root-topic "/" app-topic)
-    app-topic))
-
-
-(defn- broker-topic->app-topic [{{root-topic :root-topic} :config} broker-topic]
-  (if root-topic
-    (string/replace broker-topic (re-pattern (str "^" root-topic "/")) "")
-    broker-topic))
 
 
 (defn- subscription-chan [{stream :stream :as client} topic-filter payload-formatter]
