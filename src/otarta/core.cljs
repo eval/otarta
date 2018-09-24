@@ -53,19 +53,24 @@
     broker-topic))
 
 
-(defn parse-broker-url [url]
-  (let [parsed     (uri/parse url)
-        ws-url-map (select-keys parsed [:scheme :host :port :path])
-        ws-url     (str (uri/map->URI. ws-url-map))]
-    (cond-> {:ws-url ws-url}
-      (:user parsed)
-      (assoc :username (:user parsed))
+(defn parse-broker-url
+  ([url] (parse-broker-url url {}))
+  ([url {:keys [default-root-topic]}]
+   (let [parsed     (uri/parse url)
+         ws-url-map (select-keys parsed [:scheme :host :port :path])
+         ws-url     (str (uri/map->URI. ws-url-map))]
+     (cond-> {:ws-url ws-url}
+       (:user parsed)
+       (assoc :username (:user parsed))
 
-      (:password parsed)
-      (assoc :password (:password parsed))
+       (:password parsed)
+       (assoc :password (:password parsed))
 
-      (-> parsed :fragment (string/blank?) not)
-      (assoc :root-topic (:fragment parsed)))))
+       default-root-topic
+       (assoc :root-topic default-root-topic)
+
+       (-> parsed :fragment (string/blank?) not)
+       (assoc :root-topic (:fragment parsed))))))
 
 
 (defn topic-filter-matches-topic? [topic-filter topic]
@@ -216,10 +221,19 @@
     [nil client]))
 
 
-(defn client [{:keys [broker-url] :as opts}]
+(defn client
+  "Accepts the following parameters:
+  - broker-url (required) - url of the form ws(s)://(user:password@)host:12345/path(#some/root-topic).
+The root-topic is prepended to all subscribes/publishes and ensures that the client only needs to care about topics that are relevant for the application, e.g. \"temperature/current\" (instead of \"staging/sensor0/temperature/current\"). You can provide a default-topic-root.
+  - default-root-topic - root-topic used when broker-url does not contain one. This e.g. allows the client-logic to subscribe to \"#\" knowing that it won't subscribe to the root of a broker.
+  - keep-alive (default 60) - maximum seconds between pings.
+  - client-id (default \"otarta-<random-uuid>\") - Client Identifier used to connect to broker.
+"
+  [{:keys [broker-url default-root-topic] :as opts}]
+  {:pre [broker-url]}
   (let [default-opts {:keep-alive 60 :client-id (str "otarta-" (random-uuid))}
         config (-> broker-url
-                   (parse-broker-url)
+                   (parse-broker-url {:default-root-topic default-root-topic})
                    (merge default-opts)
                    (merge (select-keys opts [:client-id :keep-alive])))]
     {:config config :stream (atom nil) :pinger (atom nil)}))

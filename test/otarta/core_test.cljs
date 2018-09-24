@@ -30,7 +30,22 @@
     (are [broker-url root-topic] (= root-topic (:root-topic (sut/parse-broker-url broker-url)))
       "ws://user@host/path#foo"                       "foo"
       "ws://user:some-pass@host/path#some/root/topic" "some/root/topic"
-      "ws://user:some-pass@host/path#"                nil)))
+      "ws://user:some-pass@host/path#"                nil))
+
+  (testing "assigns :default-topic-root to :root-topic when none in broker-url"
+    (are [broker-url default expected] (= expected
+                                          (-> broker-url
+                                              (sut/parse-broker-url {:default-root-topic default})
+                                              :root-topic))
+      "ws://user@host/path"                           "default" "default"
+      "ws://user:some-pass@host/path#some/root/topic" "default" "some/root/topic"
+      "ws://user:some-pass@host/path#"                nil       nil
+      "ws://user:some-pass@host/path#"                "default" "default")))
+
+
+(deftest client-test
+  (testing "raises when no broker-url provided"
+    (is (thrown-with-msg? js/Error #"Assert failed: broker-url" (sut/client {})))))
 
 
 (deftest topic-filter-matches-topic?-test
