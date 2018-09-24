@@ -41,16 +41,36 @@
     (contains? payload-formats fmt) (get payload-formats fmt)))
 
 
-(defn parse-broker-url [url]
-  (let [parsed     (uri/parse url)
-        ws-url-map (select-keys parsed [:scheme :host :port :path])
-        ws-url     (str (uri/map->URI. ws-url-map))]
-    (cond-> {:ws-url ws-url}
-      (:user parsed)
-      (assoc :username (:user parsed))
+(defn- app-topic->broker-topic [{{root-topic :root-topic} :config} app-topic]
+  (if root-topic
+    (str root-topic "/" app-topic)
+    app-topic))
 
-      (:password parsed)
-      (assoc :password (:password parsed)))))
+
+(defn- broker-topic->app-topic [{{root-topic :root-topic} :config} broker-topic]
+  (if root-topic
+    (string/replace broker-topic (re-pattern (str "^" root-topic "/")) "")
+    broker-topic))
+
+
+(defn parse-broker-url
+  ([url] (parse-broker-url url {}))
+  ([url {:keys [default-root-topic]}]
+   (let [parsed     (uri/parse url)
+         ws-url-map (select-keys parsed [:scheme :host :port :path])
+         ws-url     (str (uri/map->URI. ws-url-map))]
+     (cond-> {:ws-url ws-url}
+       (:user parsed)
+       (assoc :username (:user parsed))
+
+       (:password parsed)
+       (assoc :password (:password parsed))
+
+       default-root-topic
+       (assoc :root-topic default-root-topic)
+
+       (-> parsed :fragment (string/blank?) not)
+       (assoc :root-topic (:fragment parsed))))))
 
 
 (defn topic-filter-matches-topic? [topic-filter topic]
@@ -201,10 +221,19 @@
     [nil client]))
 
 
-(defn client [{:keys [broker-url] :as opts}]
+(defn client
+  "Accepts the following parameters:
+  - broker-url (required) - url of the form ws(s)://(user:password@)host:12345/path(#some/root-topic).
+The root-topic is prepended to all subscribes/publishes and ensures that the client only needs to care about topics that are relevant for the application, e.g. \"temperature/current\" (instead of \"staging/sensor0/temperature/current\"). You can provide a default-topic-root.
+  - default-root-topic - root-topic used when broker-url does not contain one. This e.g. allows the client-logic to subscribe to \"#\" knowing that it won't subscribe to the root of a broker.
+  - keep-alive (default 60) - maximum seconds between pings.
+  - client-id (default \"otarta-<random-uuid>\") - Client Identifier used to connect to broker.
+"
+  [{:keys [broker-url default-root-topic] :as opts}]
+  {:pre [broker-url]}
   (let [default-opts {:keep-alive 60 :client-id (str "otarta-" (random-uuid))}
         config (-> broker-url
-                   (parse-broker-url)
+                   (parse-broker-url {:default-root-topic default-root-topic})
                    (merge default-opts)
                    (merge (select-keys opts [:client-id :keep-alive])))]
     {:config config :stream (atom nil) :pinger (atom nil)}))
@@ -247,15 +276,17 @@
     [:unkown-format nil]))
 
 
-(defn- publish* [{stream :stream :as client} topic msg {:keys [format] :or {format :string}}]
-  (info :publish :client client :topic topic :msg msg :format format)
+(defn- publish* [{stream :stream :as client} app-topic msg {:keys [format] :or {format :string}}]
+  (info :publish :client client :app-topic app-topic :msg msg :format format)
   (go
     (let [{sink :sink}        @stream
           empty-msg?          (or (nil? msg) (= "" msg))
-          to-publish          {:topic topic :payload msg :empty? empty-msg?}
+          to-publish          {:topic   (app-topic->broker-topic client app-topic)
+                               :payload msg
+                               :empty?  empty-msg?}
           [fmt-err formatted] (err->> format
-                                     (generate-payload-formatter :write)
-                                     (#(apply % (list to-publish))))]
+                                      (generate-payload-formatter :write)
+                                      (#(apply % (list to-publish))))]
       (if fmt-err
         [fmt-err nil]
         (do (>! sink (packet/publish formatted))
@@ -275,8 +306,9 @@
            (publish* topic msg opts))))
 
 
-(defn- subscription-chan [source topic-filter payload-formatter]
-  (let [pkts-for-topic-filter (packet-filter
+(defn- subscription-chan [{stream :stream :as client} topic-filter payload-formatter]
+  (let [{source :source} @stream
+        pkts-for-topic-filter (packet-filter
                                {[:remaining-bytes :topic]
                                 (partial topic-filter-matches-topic? topic-filter)})
         pkt->msg              (fn [{{:keys [retain? dup? qos]} :first-byte
@@ -287,7 +319,7 @@
                                  :payload   payload
                                  :qos       qos
                                  :retained? retain?
-                                 :topic     topic})
+                                 :topic     (broker-topic->app-topic client topic)})
         subscription-xf       (comp pkts-for-topic-filter
                                     (map pkt->msg)
                                     (map (comp second payload-formatter))
@@ -296,13 +328,14 @@
 
 
 (defn- subscribe*
-  [{stream :stream :as client} topic-filter {:keys [format] :or {format :string}}]
-  (info :subscribe :topic-filter topic-filter)
+  [{stream :stream :as client} app-topic-filter {:keys [format] :or {format :string}}]
+  (info :subscribe :app-topic-filter app-topic-filter)
   (go
     (let [{:keys [sink source]} @stream
+          topic-filter          (app-topic->broker-topic client app-topic-filter)
           [sub-err sub-ch]      (err->> format
                                         (generate-payload-formatter :read)
-                                        (subscription-chan source topic-filter))
+                                        (subscription-chan client topic-filter))
           sub-pkt               (packet/subscribe {:topic-filter      topic-filter
                                                    :packet-identifier 1})
           next-suback           (capture-first-packet source
