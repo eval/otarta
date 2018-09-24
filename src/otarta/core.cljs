@@ -53,6 +53,10 @@
     broker-topic))
 
 
+(defn- next-packet-identifier [{pktid-atom :packet-identifier :as _client}]
+  (swap! pktid-atom inc))
+
+
 (defn parse-broker-url
   ([url] (parse-broker-url url {}))
   ([url {:keys [default-root-topic]}]
@@ -236,7 +240,7 @@ The root-topic is prepended to all subscribes/publishes and ensures that the cli
                    (parse-broker-url {:default-root-topic default-root-topic})
                    (merge default-opts)
                    (merge (select-keys opts [:client-id :keep-alive])))]
-    {:config config :stream (atom nil) :pinger (atom nil)}))
+    {:config config :stream (atom nil) :pinger (atom nil) :packet-identifier (atom 0)}))
 
 
 (defn connect
@@ -336,10 +340,12 @@ The root-topic is prepended to all subscribes/publishes and ensures that the cli
           [sub-err sub-ch]      (err->> format
                                         (generate-payload-formatter :read)
                                         (subscription-chan client topic-filter))
+          pktid                 (next-packet-identifier client)
           sub-pkt               (packet/subscribe {:topic-filter      topic-filter
-                                                   :packet-identifier 1})
+                                                   :packet-identifier pktid})
           next-suback           (capture-first-packet source
-                                                      (packet-filter {[:first-byte :type] :suback}))
+                                                      (packet-filter {[:first-byte :type] :suback
+                                                                      [:remaining-bytes :packet-identifier] pktid}))
           [mqtt-err {{{:keys [_max-qos failure?] :as _sub-result} :payload} :remaining-bytes}]
           (<! (send-and-await-response sub-pkt sink next-suback))]
       (cond

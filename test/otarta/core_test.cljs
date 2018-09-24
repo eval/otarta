@@ -157,15 +157,32 @@
                              (<! (topics-received not-foo-sub))))))))
 
     (testing "root-topic of client are not part of the received topics"
-      (let [source      (async/chan)
-            client      (create-client {:source source :root-topic "root"})
-            foo-sub     (subscribe! client "root/foo/+" :raw)]
+      (let [source  (async/chan)
+            client  (create-client {:source source :root-topic "root"})
+            foo-sub (subscribe! client "root/foo/+" :raw)]
         (publish! source "root/foo/bar" "for foo")
         (publish! source "root/foo/baz" "for foo")
 
         (test-async (go
                       (is (= ["foo/bar" "foo/baz"]
                              (<! (topics-received foo-sub)))))))))
+
+  (deftest subscription-chan-test2b
+    (testing "similar subs both receive messages"
+      (let [source            (async/chan)
+            client            (create-client {:source source})
+            foo1-sub          (subscribe! client "foo/+" :raw)
+            foo2-sub          (subscribe! client "foo/+" :raw)
+            not-listening-sub (subscribe! client "foo/+" :raw)]
+        (publish! source "foo/bar"      "for foo")
+        (publish! source "foo/baz"      "foo foo")
+
+        (test-async (go
+                      (is (= ["foo/bar" "foo/baz"]
+                             (<! (topics-received foo1-sub))))))
+        (test-async (go
+                      (is (= ["foo/bar" "foo/baz"]
+                             (<! (topics-received foo2-sub)))))))))
 
 
   (deftest subscription-chan-test3
