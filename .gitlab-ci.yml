@@ -43,7 +43,7 @@ release:
   before_script:
     - apk --update add make
   script:
-    - make deploy
+    - make mvn-deploy
   only:
     - master
     - tags

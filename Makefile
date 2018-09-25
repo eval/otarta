@@ -24,5 +24,8 @@ clean:
 	mvn ${MAVEN_CLI_OPTS} clean
 	rm -rf target cljs-test-runner-out
 
-deploy: clean
+mvn-deploy: clean
 	mvn ${MAVEN_CLI_OPTS} deploy
+
+mvn-install: clean
+	mvn ${MAVEN_CLI_OPTS} install
