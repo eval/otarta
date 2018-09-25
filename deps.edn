@@ -9,25 +9,22 @@
                              #_#_:git/url "https://github.com/clojure/clojurescript.git"
                              #_#_:sha     "72e99c5d6f7164153cf6cf5613704ea342bde8da"}
 
-  cider/piggieback {:mvn/version "0.3.5"
-                    :exclusions  [com.google.javascript/closure-compiler]}
-
-  figwheel-sidecar {:mvn/version "0.5.16"
-                    :exclusions  [com.google.javascript/closure-compiler]}
-
-  ;; REPL
-  cider/cider-nrepl {:mvn/version "0.17.0"}
-
   ;; application
-  funcool/octet          {:mvn/version "1.1.1"}
-  haslett                {:local/root "vendor/haslett" :deps/manifest :deps}
-  lambdaisland/uri       {:mvn/version "1.1.0"}
-  org.clojure/core.async {:mvn/version "0.4.474"}
-  org.harto/huon         {:mvn/version "0.5.0"}
+  funcool/octet              {:mvn/version "1.1.1"}
+  haslett                    {:local/root "vendor/haslett" :deps/manifest :deps}
+  lambdaisland/uri           {:mvn/version "1.1.0"}
+  org.clojure/core.async     {:mvn/version "0.4.474"}
+  org.harto/huon             {:mvn/version "0.5.0"}
   com.cognitect/transit-cljs {:mvn/version "0.8.256"}}
 
  :aliases
- {:test       {:extra-deps {olical/cljs-test-runner {:mvn/version "2.1.0"}}
+ {:dev {:extra-deps {figwheel-sidecar  {:mvn/version "0.5.16"
+                                        :exclusions  [com.google.javascript/closure-compiler]}
+                     cider/piggieback  {:mvn/version "0.3.5"
+                                        :exclusions  [com.google.javascript/closure-compiler]}
+                     cider/cider-nrepl {:mvn/version "0.17.0"}}}
+
+  :test       {:extra-deps {olical/cljs-test-runner {:mvn/version "2.1.0"}}
                :main-opts  ["-m" "cljs-test-runner.main"]}
   :test-watch {:extra-deps {olical/cljs-test-runner {:mvn/version "2.1.0"}}
                :main-opts  ["-m" "cljs-test-runner.main" "--watch" "src"]}

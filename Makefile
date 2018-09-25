@@ -3,10 +3,10 @@
 compile: target/app.js
 
 compile-watch:
-	clojure build.clj compile-watch
+	clojure -A:dev build.clj compile-watch
 
 figwheel:
-	clojure build.clj figwheel
+	clojure -A:dev build.clj figwheel
 
 test:
 	clojure -Atest
@@ -15,7 +15,7 @@ test-watch:
 	clojure -Atest-watch
 
 target/app.js: 
-	clojure build.clj compile
+	clojure -A:dev build.clj compile
 
 show-outdated:
 	clojure -Aoutdated -a outdated
