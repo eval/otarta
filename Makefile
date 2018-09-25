@@ -21,4 +21,8 @@ show-outdated:
 	clojure -Aoutdated -a outdated
 
 clean:
+	mvn ${MAVEN_CLI_OPTS} clean
 	rm -rf target cljs-test-runner-out
+
+deploy: clean
+	mvn ${MAVEN_CLI_OPTS} deploy
