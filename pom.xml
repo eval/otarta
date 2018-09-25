@@ -7,6 +7,9 @@
   <name>otarta</name>
   <description>An MQTT-library for ClojureScript</description>
   <url>https://gitlab.com/eval/otarta</url>
+  <scm>
+    <url>https://gitlab.com/eval/otarta</url>
+  </scm>
   <licenses>
     <license>
       <name>MIT</name>
