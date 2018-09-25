@@ -13,9 +13,7 @@ build:
   before_script:
     - apk --update add make nodejs-npm
   script:
-    - printenv CLJ_CONFIG
     - make compile
-    - ls -lag .m2/repository
   cache:
     paths:
       - .m2/repository
