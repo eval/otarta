@@ -1,5 +1,9 @@
+variables:
+  CLJ_CONFIG: "./config/ci"
+
 stages:
   - build-and-test
+  - release
 
 build:
   stage: build-and-test
@@ -8,13 +12,11 @@ build:
     - docker
   before_script:
     - apk --update add make nodejs-npm
-    - echo '{:mvn/local-repo "./m2"}' > ~/.clojure/deps.edn
   script:
     - make compile
   cache:
-    key: m2
     paths:
-      - m2
+      - .m2/repository
 
 test:
   stage: build-and-test
@@ -24,10 +26,24 @@ test:
   before_script:
     - apk --update add make nodejs-npm yarn
     - yarn add websocket
-    - echo '{:mvn/local-repo "./m2"}' > ~/.clojure/deps.edn
   script:
     - make test
   cache:
-    key: m2
     paths:
-      - m2
+      - .m2/repository
+
+release:
+  stage: release
+  image: maven:3-jdk-8-alpine
+  tags:
+    - docker
+  variables:
+    MAVEN_CLI_OPTS: "-s .m2/settings.xml --batch-mode"
+    MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+  before_script:
+    - apk --update add make
+  script:
+    - make mvn-deploy
+  only:
+    - master
+    - tags

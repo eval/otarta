@@ -62,6 +62,23 @@ cljs.user>
 See [CIDER docs](https://cider.readthedocs.io/en/latest/interactive_programming/) what you can do.
 
 
+## Release
+
+### Install locally
+
+(- ensure no CLJ_CONFIG and MAVEN_OPTS env variables in order to target ~/.m2)
+- ensure dependencies in pom.xml up to date
+  - clj -Spom
+- bump version in pom.xml
+- mvn clean install
+- testdrive locally
+
+### Deploy to Clojars
+
+- commit pom.xml to master
+- push to CI
+
+
 ## License
 
 Copyright (c) 2018 Alliander N.V. See [LICENSE](./LICENSE).
