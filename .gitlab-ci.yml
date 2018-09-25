@@ -1,6 +1,10 @@
 variables:
   CLJ_CONFIG: "./config/ci"
 
+cache:
+  paths:
+    - .m2/repository
+
 stages:
   - build-and-test
   - release
@@ -14,9 +18,6 @@ build:
     - apk --update add make nodejs-npm
   script:
     - make compile
-  cache:
-    paths:
-      - .m2/repository
 
 test:
   stage: build-and-test
@@ -28,9 +29,6 @@ test:
     - yarn add websocket
   script:
     - make test
-  cache:
-    paths:
-      - .m2/repository
 
 release:
   stage: release
