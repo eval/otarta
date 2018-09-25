@@ -5,7 +5,7 @@ stages:
   - build-and-test
   - release
 
-.build:
+build:
   stage: build-and-test
   image: clojure:tools-deps-1.9.0.391-alpine
   tags:
@@ -18,7 +18,7 @@ stages:
     paths:
       - .m2/repository
 
-.test:
+test:
   stage: build-and-test
   image: clojure:tools-deps-1.9.0.391-alpine
   tags:
@@ -44,5 +44,6 @@ release:
     - apk --update add make
   script:
     - make deploy
-  #only:
-  #  - master
+  only:
+    - master
+    - tags
