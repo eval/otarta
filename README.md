@@ -1,6 +1,8 @@
 # Otarta
 
-An MQTT-client written in ClojureScript.
+An MQTT-library for ClojureScript.
+
+_NOTE: this is pre-alpha software with an API that will change_
 
 
 ## CLI
@@ -66,11 +68,11 @@ See [CIDER docs](https://cider.readthedocs.io/en/latest/interactive_programming/
 
 ### Install locally
 
-(- ensure no CLJ_CONFIG and MAVEN_OPTS env variables in order to target ~/.m2)
+- (ensure no CLJ_CONFIG and MAVEN_OPTS env variables are set - this to target ~/.m2)
 - ensure dependencies in pom.xml up to date
   - clj -Spom
 - bump version in pom.xml
-- mvn clean install
+- make mvn-install
 - testdrive locally
 
 ### Deploy to Clojars
