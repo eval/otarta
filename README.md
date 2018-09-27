@@ -23,8 +23,8 @@ eval/otarta {:mvn/version "0.3.0"}
 ## Usage
 
 The following code assumes:
-- to be run in a browser (ie `js/WebSockets` exists)
-- a websocket-enabled MQTT-broker runs on `localhost:9001` (eg via `docker run --rm -ti -p 9001:9001 toke/mosquitto`)
+- being in a browser (ie `js/WebSockets` exists)
+- a websocket-enabled MQTT-broker on `localhost:9001` (eg via `docker run --rm -ti -p 9001:9001 toke/mosquitto`)
 
 ```clojure
 (ns example.core
@@ -51,9 +51,13 @@ The following code assumes:
   (mqtt/publish client "temperature/current" "12.1"))
 ```
 
+### client
+
 The `broker-url` should be of the form `ws(s):://(user:pass@)host.org:1234/path(#some/root/topic)`.
 
 The fragment-part is called the `root-topic` and indicates the topic relative to which the client publishes and subscribes. This allows for easy configuration of your client (e.g. "ws://some-broker/mqtt#staging/sensor1").
+
+### formats
 
 When publishing or subscribing you can specify a format. Available formats are: `string` (default), `json`, `edn` and `transit`:
 ```clojure
