@@ -23,7 +23,7 @@ eval/otarta {:mvn/version "0.3.0"}
 ## Usage
 
 The following code assumes:
-- being in a browser (ie `js/WebSockets` exists)
+- being in a browser (ie `js/WebSockets` exists. For Node.js [see below](README.md#nodejs).)
 - a websocket-enabled MQTT-broker on `localhost:9001` (eg via `docker run --rm -ti -p 9001:9001 toke/mosquitto`)
 
 ```clojure
@@ -82,11 +82,15 @@ Similarly, when formatting fails when publishing, you'll receive an error:
 
 You can provide your own format:
 ```clojure
-(:require [otarta.payload-format :as mqtt-fmt])
+(ns example.core
+  (:require [otarta.payload-format :as mqtt-fmt]))
+
+(defn extract-temperature []
+  ...)
 
 ;; this format piggybacks on the string-format
 ;; after which extract-temperature will get the relevant data.
-;; otarta will catch any exceptions that occur when reading/writing.
+;; Otarta will catch any exceptions that occur when reading/writing.
 (def custom-format
   (reify mqtt-fmt/PayloadFormat
     (read [_fmt buff]
@@ -95,6 +99,19 @@ You can provide your own format:
       (->> v (mqtt-fmt/write mqtt-fmt/string)))))
 ```
 
+### Node.js
+
+You should provide a W3C compatible websocket when running via Node.js.  
+I've had good experience with [this websocket-library (>= v1.0.28)](https://www.npmjs.com/package/websocket).
+
+With the library included in your project (see https://clojurescript.org/guides/webpack for details), the following will initialize `js/WebSocket`:
+
+```clojure
+(ns example.core
+  (:require [websocket]))
+
+(set! js/WebSocket (.-w3cwebsocket websocket))
+```
 
 ## Development
 
