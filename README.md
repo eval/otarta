@@ -4,7 +4,7 @@ An MQTT-library for ClojureScript.
 
 _NOTE: this is pre-alpha software with an API that will change_
 
-## installation
+## Installation
 
 Leiningen:
 ```clojure
