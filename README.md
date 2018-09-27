@@ -71,11 +71,11 @@ When publishing or subscribing you can specify a format. Available formats are: 
   (mqtt/publish client "temperature/current" {:created-at (js/Date.) :value 12.1} {:format :transit}))
 ```
 
-Incoming messages with a payload that is not formattable, won't appear on the subscription-channel.  
+Incoming messages with a payload that is not readable, won't appear on the subscription-channel.  
 Similarly, when formatting fails when publishing, you'll receive an error:
 
 ```clojure
-(let [[err _] (<! (mqtt/publish client "foo" #"transit?" {:format :transit}))]
+(let [[err _] (<! (mqtt/publish client "foo" #"not transit!" {:format :transit}))]
   (when err
     (println err)))
 ```
@@ -96,36 +96,9 @@ You can provide your own format:
 ```
 
 
-## CLI
+## Development
 
-The CLI allows you to subscribe from the commandline.  
-
-### start local broker
-
-(Skip this step if you already have a broker with websocket access.)
-
-```bash
-$ docker run --rm -ti -p 9001:9001 toke/mosquitto
-```
-
-### pub&sub
-
-```bash
-# one time setup
-$ make compile
-
-# subscribe to broker's SYS-topics
-$ clj -m cljs.main -re node -m otarta.main sub ws://localhost:9001 '$SYS/#' -d
-
-# publish some message
-$ clj -m cljs.main -re node -m otarta.main pub ws://localhost:9001 'foo/bar' 'baz' -d
-
-# to disable logging, remove `-d`
-```
-
-## development
-
-### testing
+### Testing
 
 ```bash
 # once
