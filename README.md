@@ -1,5 +1,9 @@
 # Otarta
 
+[![pipeline status](https://gitlab.com/eval/otarta/badges/master/pipeline.svg)](https://gitlab.com/eval/otarta/commits/master)
+[![Clojars Project](https://img.shields.io/clojars/v/eval/otarta.svg)](https://clojars.org/eval/otarta)
+
+
 An MQTT-library for ClojureScript.
 
 _NOTE: this is pre-alpha software with an API that will change_
@@ -8,12 +12,12 @@ _NOTE: this is pre-alpha software with an API that will change_
 
 Leiningen:
 ```clojure
-[eval/otarta "0.3.0-SNAPSHOT"]
+[eval/otarta "0.3.0"]
 ```
 
 Deps:
 ```clojure
-eval/otarta {:mvn/version "0.3.0-SNAPSHOT"}
+eval/otarta {:mvn/version "0.3.0"}
 ```
 
 ## Usage
