@@ -9,7 +9,7 @@
 
 
 (defprotocol PayloadFormat
-  "Implement read and write operation for reading and writing data to MQTT.
+  "Implement read and write operation for reading and writing data to Uint8Array.
 
   When implementing these functions keep in mind that:
   - you don't have take the empty-message (\"\") into account
@@ -103,10 +103,9 @@ This makes writing records impossible."
     (contains? payload-formats fmt) (get payload-formats fmt)))
 
 
-(defn msg-formatter [read-write format]
+(defn msg-formatter [rw format]
   (if-let [payload-format (find-payload-format format)]
-    (let [rw        (get {:read -read :write -write} read-write)
-          formatter (fn [{e? :empty? :as msg}]
+    (let [formatter (fn [{e? :empty? :as msg}]
                       (info :formatter)
                       (let [try-format        #(try (rw payload-format %)
                                                     (catch js/Error _
@@ -141,7 +140,7 @@ This makes writing records impossible."
 "
   ([format]
    (err->> format
-           (msg-formatter :write)))
+           (msg-formatter -write)))
   ([format msg]
    (err-> format
           (write)
@@ -168,7 +167,7 @@ This makes writing records impossible."
 "
   ([format]
    (err->> format
-           (msg-formatter :read)))
+           (msg-formatter -read)))
   ([format msg]
    (err-> format
           read
