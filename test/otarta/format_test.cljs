@@ -13,7 +13,7 @@
 
 
 (defn- write-and-read [fmt]
-  #(->> % (sut/write fmt) (sut/read fmt)))
+  #(->> % (sut/-write fmt) (sut/-read fmt)))
 
 
 (deftest string-test
@@ -25,14 +25,14 @@
         "some long string")))
 
   (testing "handling non-strings"
-    (let [fut (partial sut/write sut/string)]
+    (let [fut (partial sut/-write sut/string)]
       (is (thrown? js/Error (fut 1)))
       (is (thrown? js/Error (fut []))))))
 
 
 (deftest json-test
   (testing "reading"
-    (are [buff expected] (= expected (sut/read sut/json buff))
+    (are [buff expected] (= expected (sut/-read sut/json buff))
       #js [123 34 97 34 58 49 125]
       {"a" 1}
 
@@ -40,13 +40,13 @@
       {"underscored_key" 1}))
 
   (testing "reading non-json throws error"
-    (are [s] (thrown? js/Error (sut/read sut/json (sut/write sut/string s)))
+    (are [s] (thrown? js/Error (sut/-read sut/json (sut/-write sut/string s)))
       ";; comment"
       "hello"))
 
   (testing "writing"
     (are [expected value] (.equals goog.object
-                                   expected (sut/write sut/json value))
+                                   expected (sut/-write sut/json value))
       ;; stringified and keywordize gets lost in translation
       #js [123 34 97 34 58 49 125]
       {"a" 1}
@@ -68,13 +68,13 @@
 
   (testing "writing non-edn"
     (defrecord Foo [a])
-    (are [s] (thrown? js/Error (sut/write sut/edn s))
+    (are [s] (thrown? js/Error (sut/-write sut/edn s))
       #"regex"
       (fn [])
       (->Foo 1)))
 
   (testing "reading non-edn"
-    (are [s] (thrown? js/Error (sut/read sut/edn (sut/write sut/string s)))
+    (are [s] (thrown? js/Error (sut/-read sut/edn (sut/-write sut/string s)))
       "#\"regex\""
       "/nonsense/")))
 
@@ -90,12 +90,12 @@
 
   (testing "writing non-transit"
     (defrecord Bar [a])
-    (are [s] (thrown? js/Error (sut/write sut/transit s))
+    (are [s] (thrown? js/Error (sut/-write sut/transit s))
       #"regex"
       (fn [])
       (->Bar 1)))
 
   (testing "reading non-transit"
-    (are [s] (thrown? js/Error (sut/read sut/transit (sut/write sut/string s)))
+    (are [s] (thrown? js/Error (sut/-read sut/transit (sut/-write sut/string s)))
       "#\"regex\""
       "/nonsense/")))

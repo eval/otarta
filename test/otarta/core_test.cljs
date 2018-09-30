@@ -7,7 +7,7 @@
    [goog.crypt :as crypt]
    [huon.log :as log :refer [debug info warn error]]
    [otarta.core :as sut]
-   [otarta.payload-format :as payload-fmt :refer [PayloadFormat]]
+   [otarta.format :as fmt :refer [PayloadFormat]]
    [otarta.packet :as pkt]
    [otarta.util :refer-macros [err-> err->>]]
    [otarta.test-helpers :as helpers :refer [test-async sub?]]))
