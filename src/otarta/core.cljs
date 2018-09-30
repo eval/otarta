@@ -26,21 +26,6 @@
       (js/Uint8Array. (.-buffer (packet/encode v))))))
 
 
-(def payload-formats
-  {:edn     payload-fmt/edn
-   :raw     payload-fmt/raw
-   :string  payload-fmt/string
-   :transit payload-fmt/transit
-   :json    payload-fmt/json})
-
-
-(defn- find-payload-format [fmt]
-  (info :find-payload-format :fmt fmt)
-  (cond
-    (satisfies? PayloadFormat fmt)  fmt
-    (contains? payload-formats fmt) (get payload-formats fmt)))
-
-
 (defn- app-topic->broker-topic [{{root-topic :root-topic} :config} app-topic]
   (if root-topic
     (str root-topic "/" app-topic)
@@ -259,26 +244,6 @@ The root-topic is prepended to all subscribes/publishes and ensures that the cli
               (start-pinger)))))
 
 
-(defn generate-payload-formatter [read-write format]
-  (if-let [payload-format (find-payload-format format)]
-    (let [rw        (get {:read payload-fmt/read :write payload-fmt/write} read-write)
-          empty-fmt (reify PayloadFormat
-                      (read [_ _] "")
-                      (write [_ _] (js/Uint8Array.)))
-          formatter (fn [{e? :empty? :as to-send}]
-                      (info :formatter)
-                      (let [try-format        #(try (rw payload-format %)
-                                                    (catch js/Error _
-                                                      (error :format-error)
-                                                      nil))
-                            update-fn         (if e? (partial rw empty-fmt) try-format)
-                            formatted-payload (-> to-send :payload update-fn)]
-                        (if (nil? formatted-payload)
-                          [:format-error nil]
-                          [nil (assoc to-send :payload formatted-payload)])))]
-      [nil formatter])
-    [:unkown-format nil]))
-
 
 (defn- publish* [{stream :stream :as client} app-topic msg {:keys [format] :or {format :string}}]
   (info :publish :client client :app-topic app-topic :msg msg :format format)
@@ -288,9 +253,7 @@ The root-topic is prepended to all subscribes/publishes and ensures that the cli
           to-publish          {:topic   (app-topic->broker-topic client app-topic)
                                :payload msg
                                :empty?  empty-msg?}
-          [fmt-err formatted] (err->> format
-                                      (generate-payload-formatter :write)
-                                      (#(apply % (list to-publish))))]
+          [fmt-err formatted] (payload-fmt/write format to-publish)]
       (if fmt-err
         [fmt-err nil]
         (do (>! sink (packet/publish formatted))
@@ -338,7 +301,7 @@ The root-topic is prepended to all subscribes/publishes and ensures that the cli
     (let [{:keys [sink source]} @stream
           topic-filter          (app-topic->broker-topic client app-topic-filter)
           [sub-err sub-ch]      (err->> format
-                                        (generate-payload-formatter :read)
+                                        (payload-fmt/read)
                                         (subscription-chan client topic-filter))
           pktid                 (next-packet-identifier client)
           sub-pkt               (packet/subscribe {:topic-filter      topic-filter
