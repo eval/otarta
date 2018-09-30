@@ -8,7 +8,7 @@
    [haslett.format :as ws-fmt]
    [huon.log :refer [debug info warn error]]
    [lambdaisland.uri :as uri]
-   [otarta.payload-format :as payload-fmt :refer [PayloadFormat]]
+   [otarta.format :as fmt :refer [PayloadFormat]]
    [otarta.packet :as packet]
    [otarta.util :as util :refer-macros [<err-> err-> err->>]]))
 
@@ -253,7 +253,7 @@ The root-topic is prepended to all subscribes/publishes and ensures that the cli
           to-publish          {:topic   (app-topic->broker-topic client app-topic)
                                :payload msg
                                :empty?  empty-msg?}
-          [fmt-err formatted] (payload-fmt/write format to-publish)]
+          [fmt-err formatted] (fmt/write format to-publish)]
       (if fmt-err
         [fmt-err nil]
         (do (>! sink (packet/publish formatted))
@@ -273,7 +273,7 @@ The root-topic is prepended to all subscribes/publishes and ensures that the cli
            (publish* topic msg opts))))
 
 
-(defn- subscription-chan [{stream :stream :as client} topic-filter payload-formatter]
+(defn- subscription-chan [{stream :stream :as client} topic-filter msg-reader]
   (let [{source :source} @stream
         pkts-for-topic-filter (packet-filter
                                {[:remaining-bytes :topic]
@@ -289,7 +289,7 @@ The root-topic is prepended to all subscribes/publishes and ensures that the cli
                                  :topic     (broker-topic->app-topic client topic)})
         subscription-xf       (comp pkts-for-topic-filter
                                     (map pkt->msg)
-                                    (map (comp second payload-formatter))
+                                    (map (comp second msg-reader))
                                     (remove nil?))]
     [nil (capture-all-packets source subscription-xf)]))
 
@@ -301,7 +301,7 @@ The root-topic is prepended to all subscribes/publishes and ensures that the cli
     (let [{:keys [sink source]} @stream
           topic-filter          (app-topic->broker-topic client app-topic-filter)
           [sub-err sub-ch]      (err->> format
-                                        (payload-fmt/read)
+                                        fmt/read
                                         (subscription-chan client topic-filter))
           pktid                 (next-packet-identifier client)
           sub-pkt               (packet/subscribe {:topic-filter      topic-filter

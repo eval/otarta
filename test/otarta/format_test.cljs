@@ -1,10 +1,10 @@
-(ns otarta.payload-format-test
+(ns otarta.format-test
   (:require
    [cljs.test :refer [deftest is testing are]]
    [goog.crypt :as crypt]
    [goog.object]
    [huon.log :as log :refer [debug info warn error]]
-   [otarta.payload-format :as sut]))
+   [otarta.format :as sut]))
 
 (comment
   ;; handy to create assertions:
