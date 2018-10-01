@@ -37,6 +37,7 @@ The following code assumes:
 (defn subscription-handler [ch]
   (go-loop []
     (when-let [m (<! ch)]
+      ;; example m: {:topic "temperature/current" :payload "12.1" :retain? false :qos 0 :empty? false}
       (prn "Received:" m)
       (recur))))
 
@@ -56,6 +57,24 @@ The following code assumes:
 The first argument (the `broker-url`) should be of the form `ws(s):://(user:pass@)host.org:1234/path(#some/root/topic)`.
 
 The fragment contains the `root-topic` and indicates the topic relative to which the client publishes and subscribes. This allows for easy configuration of your client (e.g. "ws://some-broker/mqtt#staging/sensor1").
+
+As a 
+
+### messages
+
+Messages have the following shape:
+
+```clojure
+{:topic "temperature/current" ;; topic relative to `root-topic`
+ :payload "12.1"    ;; formatted payload
+ :retain? false     ;; whether this message was from the broker's store or 'real-time' from publisher
+ :qos 0}            ;; quality of service (0: at most once, 1: at least once, 2: exactly once) 
+```
+
+#### retain?
+
+NOTE: `retain?` is not so much a property of the sent message, but more about when you received it: typically you receive messages with `{:retain? true}` directly after subscribing. But when you're subscribed and a message is published with the retain-flag set, the message you'll received has `{:retain? false}`. This as you received it 'first hand' from the publisher, not from the broker's store.  
+
 
 ### formats
 
