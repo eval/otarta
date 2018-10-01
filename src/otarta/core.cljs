@@ -13,6 +13,25 @@
    [otarta.util :as util :refer-macros [<err-> err-> err->>]]))
 
 
+(extend-type js/Uint8Array
+  ICounted
+  (-count [uia]
+    (.-length uia)))
+
+
+(defn- empty-payload?
+  "Examples:
+  ;; when receiving:
+  (empty-payload? (js/Uint8Array.) ;; => true
+
+  ;; when sending:
+  (empty-payload? nil) ;; => true
+  (empty-payload? \"\") ;; => true
+  (empty-payload? \"   \") ;; => false"
+  [pl]
+  (zero? (count pl)))
+
+
 (def mqtt-format
   "Read and write mqtt-packets"
   (reify ws-fmt/Format
@@ -245,14 +264,13 @@ The root-topic is prepended to all subscribes/publishes and ensures that the cli
 
 
 
-(defn- publish* [{stream :stream :as client} app-topic msg {:keys [format] :or {format :string}}]
-  (info :publish :client client :app-topic app-topic :msg msg :format format)
+(defn- publish* [{stream :stream :as client} app-topic payload {:keys [format] :or {format :string}}]
+  (info :publish :client client :app-topic app-topic :payload payload :format format)
   (go
     (let [{sink :sink}        @stream
-          empty-msg?          (or (nil? msg) (= "" msg))
           to-publish          {:topic   (app-topic->broker-topic client app-topic)
-                               :payload msg
-                               :empty?  empty-msg?}
+                               :payload payload
+                               :empty?  (empty-payload? payload)}
           [fmt-err formatted] (fmt/write format to-publish)]
       (if fmt-err
         [fmt-err nil]
@@ -266,11 +284,11 @@ The root-topic is prepended to all subscribes/publishes and ensures that the cli
   Currently `err` is always nil as no check is done whether the
   underlying connection is active, nor whether the broker received
   the message (ie qos 0)."
-  ([client topic msg] (publish client topic msg {}))
-  ([client topic msg opts]
+  ([client topic payload] (publish client topic payload {}))
+  ([client topic payload opts]
    (<err-> client
            connect
-           (publish* topic msg opts))))
+           (publish* topic payload opts))))
 
 
 (defn- subscription-chan [{stream :stream :as client} topic-filter msg-reader]
@@ -282,7 +300,7 @@ The root-topic is prepended to all subscribes/publishes and ensures that the cli
                                     {topic :topic}             :remaining-bytes
                                     {payload :payload}         :extra}]
                                 {:dup?      dup?
-                                 :empty?    (-> payload .-byteLength zero?)
+                                 :empty?    (empty-payload? payload)
                                  :payload   payload
                                  :qos       qos
                                  :retained? retain?

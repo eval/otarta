@@ -48,7 +48,8 @@
 
   (testing "writing"
     (are [expected value] (.equals goog.object
-                                   expected (sut/-write sut/json value))
+                                   (js/Uint8Array. expected)
+                                   (sut/-write sut/json value))
       ;; stringified and keywordize gets lost in translation
       #js [123 34 97 34 58 49 125]
       {"a" 1}
