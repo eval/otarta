@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>eval</groupId>
   <artifactId>otarta</artifactId>
-  <version>0.3.0-SNAPSHOT</version>
+  <version>$RELEASE_VERSION</version>
   <name>otarta</name>
   <description>An MQTT-library for ClojureScript</description>
   <url>https://gitlab.com/eval/otarta</url>

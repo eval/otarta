@@ -39,8 +39,11 @@ release:
     MAVEN_CLI_OPTS: "-s .m2/settings.xml --batch-mode"
     MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
   before_script:
-    - apk --update add make
+    - apk --update add make gettext git
   script:
+    - export RELEASE_VERSION=$(git describe --tags)
+    - '[[ "master" != $CI_COMMIT_REF_NAME ]] || export RELEASE_VERSION=${RELEASE_VERSION/-*/-SNAPSHOT}'
+    - envsubst '${RELEASE_VERSION}' <pom.xml.template >pom.xml
     - make mvn-deploy
   only:
     - master
