@@ -32,7 +32,7 @@ The following code assumes:
   (:require [cljs.core.async :as a :refer [<!]]
             [otarta.core :as mqtt]))
 
-(defonce client (mqtt/client {:broker-url "ws://localhost:9001/mqtt"}))
+(defonce client (mqtt/client "ws://localhost:9001/mqtt"))
 
 (defn subscription-handler [ch]
   (go-loop []
@@ -53,9 +53,9 @@ The following code assumes:
 
 ### client
 
-The `broker-url` should be of the form `ws(s):://(user:pass@)host.org:1234/path(#some/root/topic)`.
+The first argument (the `broker-url`) should be of the form `ws(s):://(user:pass@)host.org:1234/path(#some/root/topic)`.
 
-The fragment-part is called the `root-topic` and indicates the topic relative to which the client publishes and subscribes. This allows for easy configuration of your client (e.g. "ws://some-broker/mqtt#staging/sensor1").
+The fragment contains the `root-topic` and indicates the topic relative to which the client publishes and subscribes. This allows for easy configuration of your client (e.g. "ws://some-broker/mqtt#staging/sensor1").
 
 ### formats
 
