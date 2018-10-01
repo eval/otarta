@@ -44,8 +44,23 @@
 
 
 (deftest client-test
-  (testing "raises when no broker-url provided"
-    (is (thrown-with-msg? js/Error #"Assert failed: broker-url" (sut/client {})))))
+  (testing "config"
+    (testing "client-id"
+      (testing "when none provided has default prefix, correct chars and length [MQTT-3.1.3-5]"
+        (is (re-find #"otarta[a-zA-Z0-9]{17}$"
+                     (-> "ws://localhost" (sut/client) :config :client-id))))
+      (testing "when prefix provided has correct chars and length"
+        (is (re-find #"origin[a-zA-Z0-9]{17}$"
+                     (-> "ws://localhost"
+                         (sut/client {:client-id-prefix "origin"})
+                         :config
+                         :client-id))))
+      (testing "when client-id provided it's used as-is"
+        (is (= "custom-client"
+             (-> "ws://localhost"
+                 (sut/client {:client-id "custom-client"})
+                 :config
+                 :client-id)))))))
 
 
 (deftest topic-filter-matches-topic?-test
