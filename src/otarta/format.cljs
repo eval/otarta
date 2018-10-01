@@ -12,9 +12,8 @@
   "Implement read and write operation for reading and writing data to Uint8Array.
 
   When implementing these functions keep in mind that:
-  - you don't have take the empty-message (\"\") into account
-  - an error should be thrown when reading/writings fails (or would write non-readable data),
-  this signals to the caller that the formatting failed."
+  - the format is bypassed for messages containing {:empty? true} (ie no need to handle writing/reading \"\")
+  - an error should be thrown when reading/writings fails (or would write non-readable data). This signals to the caller that the formatting failed."
   (-read [format arraybuffer])
   (-write [format value]))
 
@@ -90,6 +89,7 @@ This makes writing records impossible."
 
 (def payload-formats
   {:edn     edn
+   :empty   empty
    :raw     raw
    :string  string
    :transit transit
@@ -122,7 +122,7 @@ This makes writing records impossible."
 
 (defn write
   "Applies `format` to :payload of `msg` or yields a writer when no `msg` given.
-  When `msg` has :empty?, `format` is ignored.
+  When `msg` has [:empty? true], the empty-format is used instead of `format`.
 
   `format` can be one of `payload-formats`, or a reify of PayloadFormat.
 
@@ -149,7 +149,7 @@ This makes writing records impossible."
 
 (defn read
   "Applies `format` to :payload of `msg` or yields a reader when no `msg` given.
-  When `msg` has :empty?, `format` is ignored.
+  When `msg` contains [:empty? true], the empty-format is used instead of `format`.
 
   `format` can be one of payload-formats, or a reify of PayloadFormat.
 
