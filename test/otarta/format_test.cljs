@@ -32,7 +32,7 @@
       (is (thrown? js/Error (fut []))))))
 
 
-(deftest json-test
+(deftest ^{:focus true} json-test
   (testing "reading"
     (are [buff expected] (= expected (sut/-read sut/json buff))
       #js [123 34 97 34 58 49 125]
