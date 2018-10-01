@@ -186,9 +186,9 @@ $ node target/app.js
 user> (figwheel/cljs-repl)
 ;; prompt changes to:
 cljs.user>
-;; to quickly see what otarta can do
-;; you could evaluate the otarta.main namespace
-;; and eval the comment-section at the bottom line by line.
+;; to quickly see what otarta can do:
+;; - evaluate the otarta.main namespace
+;; - then eval the comment-section of otarta.main line by line
 ```
 
 See [CIDER docs](https://cider.readthedocs.io/en/latest/interactive_programming/) what you can do.
