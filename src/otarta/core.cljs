@@ -8,9 +8,28 @@
    [haslett.format :as ws-fmt]
    [huon.log :refer [debug info warn error]]
    [lambdaisland.uri :as uri]
-   [otarta.payload-format :as payload-fmt :refer [PayloadFormat]]
+   [otarta.format :as fmt :refer [PayloadFormat]]
    [otarta.packet :as packet]
    [otarta.util :as util :refer-macros [<err-> err-> err->>]]))
+
+
+(extend-type js/Uint8Array
+  ICounted
+  (-count [uia]
+    (.-length uia)))
+
+
+(defn- empty-payload?
+  "Examples:
+  ;; when receiving:
+  (empty-payload? (js/Uint8Array.) ;; => true
+
+  ;; when sending:
+  (empty-payload? nil) ;; => true
+  (empty-payload? \"\") ;; => true
+  (empty-payload? \"   \") ;; => false"
+  [pl]
+  (zero? (count pl)))
 
 
 (def mqtt-format
@@ -24,21 +43,6 @@
     (write [_ v]
       (info :mqtt-format :write v)
       (js/Uint8Array. (.-buffer (packet/encode v))))))
-
-
-(def payload-formats
-  {:edn     payload-fmt/edn
-   :raw     payload-fmt/raw
-   :string  payload-fmt/string
-   :transit payload-fmt/transit
-   :json    payload-fmt/json})
-
-
-(defn- find-payload-format [fmt]
-  (info :find-payload-format :fmt fmt)
-  (cond
-    (satisfies? PayloadFormat fmt)  fmt
-    (contains? payload-formats fmt) (get payload-formats fmt)))
 
 
 (defn- app-topic->broker-topic [{{root-topic :root-topic} :config} app-topic]
@@ -259,38 +263,15 @@ The root-topic is prepended to all subscribes/publishes and ensures that the cli
               (start-pinger)))))
 
 
-(defn generate-payload-formatter [read-write format]
-  (if-let [payload-format (find-payload-format format)]
-    (let [rw        (get {:read payload-fmt/read :write payload-fmt/write} read-write)
-          empty-fmt (reify PayloadFormat
-                      (read [_ _] "")
-                      (write [_ _] (js/Uint8Array.)))
-          formatter (fn [{e? :empty? :as to-send}]
-                      (info :formatter)
-                      (let [try-format        #(try (rw payload-format %)
-                                                    (catch js/Error _
-                                                      (error :format-error)
-                                                      nil))
-                            update-fn         (if e? (partial rw empty-fmt) try-format)
-                            formatted-payload (-> to-send :payload update-fn)]
-                        (if (nil? formatted-payload)
-                          [:format-error nil]
-                          [nil (assoc to-send :payload formatted-payload)])))]
-      [nil formatter])
-    [:unkown-format nil]))
 
-
-(defn- publish* [{stream :stream :as client} app-topic msg {:keys [format] :or {format :string}}]
-  (info :publish :client client :app-topic app-topic :msg msg :format format)
+(defn- publish* [{stream :stream :as client} app-topic payload {:keys [format] :or {format :string}}]
+  (info :publish :client client :app-topic app-topic :payload payload :format format)
   (go
     (let [{sink :sink}        @stream
-          empty-msg?          (or (nil? msg) (= "" msg))
           to-publish          {:topic   (app-topic->broker-topic client app-topic)
-                               :payload msg
-                               :empty?  empty-msg?}
-          [fmt-err formatted] (err->> format
-                                      (generate-payload-formatter :write)
-                                      (#(apply % (list to-publish))))]
+                               :payload payload
+                               :empty?  (empty-payload? payload)}
+          [fmt-err formatted] (fmt/write format to-publish)]
       (if fmt-err
         [fmt-err nil]
         (do (>! sink (packet/publish formatted))
@@ -303,14 +284,14 @@ The root-topic is prepended to all subscribes/publishes and ensures that the cli
   Currently `err` is always nil as no check is done whether the
   underlying connection is active, nor whether the broker received
   the message (ie qos 0)."
-  ([client topic msg] (publish client topic msg {}))
-  ([client topic msg opts]
+  ([client topic payload] (publish client topic payload {}))
+  ([client topic payload opts]
    (<err-> client
            connect
-           (publish* topic msg opts))))
+           (publish* topic payload opts))))
 
 
-(defn- subscription-chan [{stream :stream :as client} topic-filter payload-formatter]
+(defn- subscription-chan [{stream :stream :as client} topic-filter msg-reader]
   (let [{source :source} @stream
         pkts-for-topic-filter (packet-filter
                                {[:remaining-bytes :topic]
@@ -319,14 +300,14 @@ The root-topic is prepended to all subscribes/publishes and ensures that the cli
                                     {topic :topic}             :remaining-bytes
                                     {payload :payload}         :extra}]
                                 {:dup?      dup?
-                                 :empty?    (-> payload .-byteLength zero?)
+                                 :empty?    (empty-payload? payload)
                                  :payload   payload
                                  :qos       qos
                                  :retained? retain?
                                  :topic     (broker-topic->app-topic client topic)})
         subscription-xf       (comp pkts-for-topic-filter
                                     (map pkt->msg)
-                                    (map (comp second payload-formatter))
+                                    (map (comp second msg-reader))
                                     (remove nil?))]
     [nil (capture-all-packets source subscription-xf)]))
 
@@ -338,7 +319,7 @@ The root-topic is prepended to all subscribes/publishes and ensures that the cli
     (let [{:keys [sink source]} @stream
           topic-filter          (app-topic->broker-topic client app-topic-filter)
           [sub-err sub-ch]      (err->> format
-                                        (generate-payload-formatter :read)
+                                        fmt/read
                                         (subscription-chan client topic-filter))
           pktid                 (next-packet-identifier client)
           sub-pkt               (packet/subscribe {:topic-filter      topic-filter

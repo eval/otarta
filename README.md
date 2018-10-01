@@ -36,12 +36,21 @@ $ clj -m cljs.main -re node -m otarta.main pub ws://localhost:9001 'foo/bar' 'ba
 
 ### testing
 
+Via [cljs-test-runner](https://github.com/Olical/cljs-test-runner/):
+
 ```bash
 # once
 $ clojure -Atest
 
 # watching
 $ clojure -Atest-watch
+
+# specific tests
+(deftest ^{:focus true} only-this-test ...)
+$ clojure -Atest-watch -i :focus
+
+# more options:
+$ clojure -Atest-watch --help
 ```
 
 ### Figwheel
