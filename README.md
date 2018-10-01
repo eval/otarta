@@ -6,7 +6,7 @@
 
 An MQTT-library for ClojureScript.
 
-_NOTE: this is pre-alpha software with an API that will change_
+_NOTE: this is pre-alpha software with an API that will change (see the [CHANGELOG](./CHANGELOG.md) for breaking changes)_
 
 ## Installation
 
@@ -32,12 +32,12 @@ The following code assumes:
   (:require [cljs.core.async :as a :refer [<!]]
             [otarta.core :as mqtt]))
 
-(defonce client (mqtt/client "ws://localhost:9001/mqtt"))
+(defonce client (mqtt/client "ws://localhost:9001/mqtt#weather-sensor"))
 
 (defn subscription-handler [ch]
   (go-loop []
     (when-let [m (<! ch)]
-      ;; example m: {:topic "temperature/current" :payload "12.1" :retain? false :qos 0 :empty? false}
+      ;; example m: {:topic "temperature/current" :payload "12.1" :retain? false :qos 0}
       (prn "Received:" m)
       (recur))))
 
@@ -54,11 +54,19 @@ The following code assumes:
 
 ### client
 
+### broker-url
+
 The first argument (the `broker-url`) should be of the form `ws(s):://(user:pass@)host.org:1234/path(#some/root/topic)`.
 
-The fragment contains the `root-topic` and indicates the topic relative to which the client publishes and subscribes. This allows for easy configuration of your client (e.g. "ws://some-broker/mqtt#staging/sensor1").
+The fragment contains the `root-topic` and indicates the topic relative to which the client publishes and subscribes. This allows for pointing the client to a specific subtree of the broker (eg where it has read/write-permissions, or where it makes sense given the stage: `ws://some-broker/mqtt#acceptance/sensor1`).
 
-As a 
+When you write a client that receives its broker-url from outside (ie as an environment variable), it might lack a root-topic. In order to prevent unwanted effects in that case (eg the client subscribing to "#" essentially subscribing to the *root of the broker*) you can provide a `default-root-topic`:
+```clojure
+(mqtt/client config.broker-url {:default-root-topic "weather-sensor"})
+```
+The client will then treat the broker-url `ws://localhost:9001/mqtt` like `ws://localhost:9001/mqtt#weather-sensor`.
+When `config.broker-url` does contain a `root-topic`, the `default-root-topic` is ignored (but gives a nice hint as to what the `root-topic` could look like, eg `acceptance/weather-sensor`).
+
 
 ### messages
 
@@ -73,8 +81,7 @@ Messages have the following shape:
 
 #### retain?
 
-NOTE: `retain?` is not so much a property of the sent message, but more about when you received it: typically you receive messages with `{:retain? true}` directly after subscribing. But when you're subscribed and a message is published with the retain-flag set, the message you'll received has `{:retain? false}`. This as you received it 'first hand' from the publisher, not from the broker's store.  
-
+NOTE: `retain?` is not so much a property of the sent message, but tells you *when* you received it: typically you receive messages with `{:retain? true}` directly after subscribing. But when you're subscribed and a message is published with the retain-flag set, the message you'll received has `{:retain? false}`. This as you received it 'first hand' from the publisher, not from the broker's store.  
 
 ### formats
 
@@ -132,6 +139,13 @@ With the library included in your project (see https://clojurescript.org/guides/
 (set! js/WebSocket (.-w3cwebsocket websocket))
 ```
 
+## Limitations
+
+- only QoS 0
+- only clean-session
+- no reconnect built-in
+- untested for large payloads (ie more than a couple of KB)
+
 ## Development
 
 ### Testing
@@ -159,6 +173,9 @@ $ node target/app.js
 user> (figwheel/cljs-repl)
 ;; prompt changes to:
 cljs.user>
+;; to quickly see what otarta can do
+;; you could evaluate the otarta.main namespace
+;; and eval the comment-section at the bottom line by line.
 ```
 
 See [CIDER docs](https://cider.readthedocs.io/en/latest/interactive_programming/) what you can do.
