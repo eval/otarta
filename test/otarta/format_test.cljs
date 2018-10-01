@@ -4,14 +4,16 @@
    [goog.crypt :as crypt]
    [goog.object]
    [huon.log :as log :refer [debug info warn error]]
-   [otarta.format :as sut]))
+   [otarta.format :as sut :refer [PayloadFormat]]
+   [otarta.test-helpers :refer [sub?]]))
 
 (comment
   ;; handy to create assertions:
   (println (crypt/stringToUtf8ByteArray "{\"a\":1}"))
   )
 
-
+;; formats
+;;
 (defn- write-and-read [fmt]
   #(->> % (sut/-write fmt) (sut/-read fmt)))
 
@@ -99,3 +101,42 @@
     (are [s] (thrown? js/Error (sut/-read sut/transit (sut/-write sut/string s)))
       "#\"regex\""
       "/nonsense/")))
+
+;; read message
+(deftest read-test
+  (testing "yields error for unknown format"
+    (is (sub? [:unkown-format]
+              (sut/read :foo))))
+
+  (testing "yields no error for known formats"
+    (is (sub? [nil]
+              (sut/read :json)))
+    (is (sub? [nil]
+              (sut/read :transit))))
+
+  (testing "custom format"
+    (let [my-fmt (reify PayloadFormat
+                   (-read [_ _] "READ")
+                   (-write [_ _] "WRITTEN"))]
+      (testing "is an acceptable format"
+        (is (some? (-> my-fmt sut/read second))))
+
+      (testing "is applied to message's payload"
+        (is (sub? [nil {:payload "READ"}]
+                  (-> my-fmt (sut/read {:payload #js []})))))
+
+      (testing "is bypassed when messsage is empty"
+        (is (sub? [nil {:payload ""}]
+                  (-> my-fmt (sut/read {:empty? true :payload #js []})))))))
+
+  (testing "yields :format-error for messages with unreadable payloads"
+    (let [msg-with-payload (fn [s] {:payload (crypt/stringToUtf8ByteArray s)})]
+      (are [fmt pl error?] (= error?
+                              (-> fmt
+                                  (sut/read (msg-with-payload pl))
+                                  first
+                                  (= :format-error)))
+        :json "no json!"     true
+        :json "{\"a\":1}"    false
+        :edn  "{\"a\":1}"    false
+        :edn  "#\"no edn!\"" true))))
