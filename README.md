@@ -20,6 +20,10 @@ Deps:
 eval/otarta {:mvn/version "0.3.0"}
 ```
 
+## Examples
+
+* [CI-Dashboard](https://eval.gitlab.io/ci-dashboard/) (source: https://gitlab.com/eval/ci-dashboard)
+
 ## Usage
 
 The following code assumes:
