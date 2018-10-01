@@ -116,7 +116,7 @@
                                                          :topic   topic
                                                          :payload (str->uint8array msg)})))
       subscribe!        #(-> %3
-                             (err->> (sut/generate-payload-formatter :read)
+                             (err->> (fmt/read)
                                      (sut/subscription-chan %1 %2))
                              second)
       messages-received (fn [ch]
@@ -235,40 +235,3 @@
         (test-async (go
                       (is (= [true false]
                              (->> sub messages-received <! (map :empty?))))))))))
-
-
-(deftest generate-payload-formatter-test
-  (testing "unknown format"
-    (is (= [:unkown-format nil]
-           (sut/generate-payload-formatter :read :foo))))
-
-  (testing "custom format"
-    (let [my-fmt   (reify PayloadFormat
-                     (read [_ _] "READ")
-                     (write [_ _] "WRITTEN"))
-          [_ rfut] (sut/generate-payload-formatter :read my-fmt)
-          [_ wfut] (sut/generate-payload-formatter :write my-fmt)]
-      (is (sub? [nil {:payload "READ"}]
-                (rfut {:payload []})))
-      (is (sub? [nil {:payload "WRITTEN"}]
-                (wfut {:payload ""})))))
-
-
-  (testing "bypasses requested format for :empty?"
-    (let [[_ rfut] (sut/generate-payload-formatter :read :json)
-          [_ wfut] (sut/generate-payload-formatter :write :json)]
-      (is (sub? [nil {:payload ""}]
-                (rfut {:empty?  true
-                       :payload (str->uint8array "anything")})))
-      (is (.equals goog.object (js/Uint8Array.)
-                   (:payload (second (wfut {:empty?  true
-                                            :payload nil})))))))
-
-
-  (testing "yields :error when formatter fails"
-    (let [[_ read-json] (sut/generate-payload-formatter :read :json)
-          [_ write-edn] (sut/generate-payload-formatter :write :edn)]
-      (is (sub? [:format-error]
-                (read-json {:payload (str->uint8array "all but json")})))
-      (is (sub? [:format-error]
-                (write-edn {:payload #"no edn"}))))))
