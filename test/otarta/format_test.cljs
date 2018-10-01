@@ -140,3 +140,47 @@
         :json "{\"a\":1}"    false
         :edn  "{\"a\":1}"    false
         :edn  "#\"no edn!\"" true))))
+
+(deftest write-test
+  (testing "yields error for unknown format"
+    (is (sub? [:unkown-format]
+              (sut/write :foo))))
+
+  (testing "yields no error for known formats"
+    (is (sub? [nil]
+              (sut/write :json)))
+    (is (sub? [nil]
+              (sut/write :transit))))
+
+  (testing "custom format"
+    (let [my-fmt (reify PayloadFormat
+                   (-read [_ _] "READ")
+                   (-write [_ _] "WRITTEN"))]
+      (testing "is an acceptable format"
+        (is (some? (-> my-fmt sut/write second))))
+
+      (testing "is applied to message's payload"
+        (is (sub? [nil {:payload "WRITTEN"}]
+                  (-> my-fmt (sut/write {:payload "anything"})))))
+
+      (testing "is bypassed when messsage is empty"
+        (is (.equals goog.object
+                     (js/Uint8Array.)
+                     (-> my-fmt
+                         (sut/write {:empty? true :payload "anything"})
+                         second
+                         :payload))))))
+
+  (testing "yields :format-error for messages with unwriteable payloads"
+    (let [msg-with-payload (fn [s] {:payload s})
+          some-record      (defrecord Baz [a])]
+      (are [fmt pl error?] (= error?
+                              (-> fmt
+                                  (sut/write (msg-with-payload pl))
+                                  first
+                                  (= :format-error)))
+        :string 1             true
+        :string "some string" false
+        :edn    #"no edn!"    true
+        :edn    (->Baz 1)     true
+        :edn    "real edn"    false))))
