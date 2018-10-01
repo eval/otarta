@@ -59,7 +59,7 @@ The fragment-part is called the `root-topic` and indicates the topic relative to
 
 ### formats
 
-When publishing or subscribing you can specify a format. Available formats are: `string` (default), `json`, `edn` and `transit`:
+When publishing or subscribing you can specify a format. Available formats are: `string` (default), `raw`, `json`, `edn` and `transit`:
 ```clojure
 (go
   (let [[err {sub-ch :ch}] (<! (mqtt/subscribe client "temperature/#" {:format :transit}))]
@@ -83,7 +83,7 @@ Similarly, when formatting fails when publishing, you'll receive an error:
 You can provide your own format:
 ```clojure
 (ns example.core
-  (:require [otarta.payload-format :as mqtt-fmt]))
+  (:require [otarta.format :as mqtt-fmt]))
 
 (defn extract-temperature []
   ...)
@@ -93,10 +93,10 @@ You can provide your own format:
 ;; Otarta will catch any exceptions that occur when reading/writing.
 (def custom-format
   (reify mqtt-fmt/PayloadFormat
-    (read [_fmt buff]
-      (->> buff (mqtt-fmt/read mqtt-fmt/string) extract-temperature))
-    (write [_fmt v]
-      (->> v (mqtt-fmt/write mqtt-fmt/string)))))
+    (-read [_fmt buff]
+      (->> buff (mqtt-fmt/-read mqtt-fmt/string) extract-temperature))
+    (-write [_fmt v]
+      (->> v (mqtt-fmt/-write mqtt-fmt/string)))))
 ```
 
 ### Node.js
