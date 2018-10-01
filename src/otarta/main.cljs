@@ -17,7 +17,7 @@
 (defn handle-sub [broker-url topic-filter]
   (info :handle-sub :broker-url broker-url :topic-filter topic-filter)
   (go
-    (reset! client (mqtt/client {:broker-url broker-url}))
+    (reset! client (mqtt/client broker-url))
 
     (let [[err {sub-ch :ch}] (<! (mqtt/subscribe @client topic-filter {:format :string}))]
       (if err
@@ -33,7 +33,7 @@
 (defn handle-pub [broker-url topic msg]
   (info :handle-pub :broker-url :topic topic :msg msg)
   (go
-    (reset! client (mqtt/client {:broker-url broker-url}))
+    (reset! client (mqtt/client broker-url))
 
     (let [[err _] (<! (mqtt/publish @client topic msg {:format :string}))]
       (when err
@@ -58,7 +58,7 @@
 
 
 (comment
-  (def client (mqtt/client {:broker-url "ws://localhost:9001"}))
+  (def client (mqtt/client "ws://localhost:9001#otarta/main"))
 
   (def sub1 (atom nil))
 
