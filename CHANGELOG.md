@@ -4,3 +4,15 @@
 
 * Formats: `PayloadFormat` moved to `otarta.format` (was `otarta.payload-format`)
 * Formats: Implement `-read` and `-write` (was `read` and `write`)
+* msg from subscription has :retain? instead of :retained?
+
+### Added
+
+* documentation
+* `otarta.core/disconnect` is idempotent
+* publish accepts retain?-option
+* client accepts `client-id-prefix`: for unique, but recognizable client-id
+
+### Fixed
+
+* generated client-id MUST be accepted as per spec
