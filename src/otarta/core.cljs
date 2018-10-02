@@ -203,15 +203,19 @@
   "Keeps mqtt-connection alive by sending pingreq's every `keep-alive`
   seconds."
   [{stream                   :stream
-    {keep-alive :keep-alive} :config :as client}]
+    {keep-alive :keep-alive} :config :as client}
+   {:keys [delay] :or {delay 0}}]
   (go
     (let [{:keys [sink source]} @stream
-          control-ch            (async/promise-chan)]
-      (info :start-pinger)
+          control-ch            (async/promise-chan)
+          delay-ms              (* 1000 delay)]
+      (info :start-pinger {:delay-ms delay-ms})
       (go-loop [n 0]
+        (when (zero? n)
+          (<! (async/timeout delay-ms)))
         (info :start-pinger :sending-ping n)
         (let [next-pingresp (capture-first-packet source
-                                                 (packet-filter {[:first-byte :type] :pingresp}))
+                                                  (packet-filter {[:first-byte :type] :pingresp}))
               [err resp]    (<! (send-and-await-response (packet/pingreq) sink next-pingresp))]
           (info :start-pinger :pong-received? (not (boolean err)))
           (if err
@@ -276,7 +280,7 @@ WARNING: Connecting with a client-id that's already in use results in the existi
 (defn connect
   "Connect with broker. Idempotent.
   Typically there's no need to call this as it's called from `publish` and `subscribe`."
-  [client]
+  [{config :config :as client}]
   (info :connect)
   ;; naive way for now
   (let [stream-present? (-> client :stream deref)]
@@ -286,7 +290,7 @@ WARNING: Connecting with a client-id that's already in use results in the existi
       (<err-> client
               (stream-connect)
               (mqtt-connect)
-              (start-pinger)))))
+              (start-pinger {:delay (:keep-alive config)})))))
 
 
 
