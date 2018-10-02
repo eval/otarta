@@ -12,6 +12,7 @@
 * `otarta.core/disconnect` is idempotent
 * publish accepts retain?-option
 * client accepts `client-id-prefix`: for unique, but recognizable client-id
+* send first PINGREQ only after keep-alive seconds
 
 ### Fixed
 
