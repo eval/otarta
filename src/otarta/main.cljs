@@ -57,6 +57,7 @@
       "sub" (apply handle-sub (subvec argsv 1 3))
       (println "Usage:\nsub: otarta.main sub <broker-url> <topic-filter> [-d]\npub: otarta.main pub <broker-url> <topic> <msg> [-d]\n"))))
 
+(set! *main-cli-fn* -main)
 
 (comment
   (def client (mqtt/client "ws://localhost:9001#otarta/main"))
