@@ -215,8 +215,8 @@ See [CIDER docs](https://cider.readthedocs.io/en/latest/interactive_programming/
 
 ## License
 
-Copyright (c) 2018 Gert Goet, ThinkCreate
+Copyright (c) 2018 Gert Goet, ThinkCreate  
 Copyright (c) 2018 Alliander N.V. 
-See [LICENSE](./LICENSE).
+See [LICENSE](./LICENSE).  
 
 For licenses of third-party software that this software uses, see [LICENSE-3RD-PARTY](./LICENSE-3RD-PARTY).
