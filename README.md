@@ -203,13 +203,15 @@ See [CIDER docs](https://cider.readthedocs.io/en/latest/interactive_programming/
 - (ensure no CLJ_CONFIG and MAVEN_OPTS env variables are set - this to target ~/.m2)
 - ensure dependencies in pom.xml up to date
   - clj -Spom
-- bump version in pom.xml
+- ensure pom.xml with new version
+  - cp pom.xml{.template,}
+  - gsed -i 's/$RELEASE_VERSION/1.2.3/' pom.xml
 - make mvn-install
 - testdrive locally
 
 ### Deploy to Clojars
 
-- commit pom.xml to master
+- create (pre-)tag
 - push to CI
 
 
