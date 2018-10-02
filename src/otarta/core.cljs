@@ -166,11 +166,13 @@
         [:stream-connect-failed (<! (:close-status stream))]))))
 
 
-(defn stream-disconnect [client]
+(defn stream-disconnect [{:keys [stream] :as client}]
   (info :stream-disconnect)
   (go
-    (let [close-status (<! (stream/close (deref (:stream client))))]
-      (info :stream-disconnect :close-status close-status))
+    (when @stream
+      (let [close-status (<! (stream/close @stream))]
+        (info :stream-disconnect :close-status close-status)
+        (reset! stream nil)))
     [nil client]))
 
 
@@ -192,7 +194,8 @@
 (defn mqtt-disconnect [{stream :stream :as client}]
   (info :mqtt-disconnect)
   (go
-    (>! (:sink @stream) (packet/disconnect))
+    (when @stream
+      (>! (:sink @stream) (packet/disconnect)))
     [nil client]))
 
 
@@ -225,7 +228,8 @@
 (defn stop-pinger [{pinger :pinger :as client}]
   (info :stop-pinger :pinger (pr-str @pinger))
   (go
-    (and @pinger (>! @pinger :stop))
+    (when @pinger
+      (>! @pinger :stop))
     [nil client]))
 
 

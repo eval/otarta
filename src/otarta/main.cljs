@@ -2,6 +2,7 @@
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]])
   (:require
+   [cljs.core.async :as async]
    [goog.crypt :as crypt]
    [huon.log :as log :refer [debug info warn error]]
    [otarta.core :as mqtt]
@@ -66,13 +67,18 @@
     (let [[err {sub-ch :ch}] (<! (mqtt/subscribe client "a/#" {:format :json}))]
       (when sub-ch
         (println "subbed!")
-        (reset! sub1 sub-ch))))
+        (swap! sub1
+               (fn [current-sub]
+                 (when current-sub
+                   (async/close! current-sub))
+                 sub-ch)))))
 
   (go-loop []
     (when-let [m (<! @sub1)]
       (prn m)
       (recur)))
 
-  (mqtt/publish client "a/b" "transit?" {:format :transit})
+  (mqtt/publish client "a/b" "transit!" {:format :transit :retain? true})
 
+  (mqtt/disconnect client)
 )
