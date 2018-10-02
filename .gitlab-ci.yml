@@ -42,7 +42,7 @@ release:
     - apk --update add make gettext
   script:
     - export RELEASE_VERSION=$CI_COMMIT_TAG
-    - envsubst '${RELEASE_VERSION}' <pom.xml.template >pom.xml
+    - envsubst '${RELEASE_VERSION}' <pom.xml >pomv.xml && mv pomv.xml pom.xml
     - make mvn-deploy
   only:
     - tags
