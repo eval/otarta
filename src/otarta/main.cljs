@@ -44,6 +44,7 @@
 
 
 (defn -main [& args]
+  (mqtt/timeout-channels-wont-prevent-nodejs-exit!)
   (let [argsv (vec args)]
     (when (= (last argsv) "-d")
       (log/set-root-level! :debug)
