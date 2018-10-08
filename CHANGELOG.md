@@ -1,3 +1,9 @@
+## unreleased
+
+### Fixed
+
+* otarta.main: timeout-channels won't prevent node process from exiting
+
 ## 0.3.0 / 2018-10-02
 
 ### Breaking
