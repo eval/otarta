@@ -3,6 +3,7 @@
    [cljs.core.async.macros :refer [go go-loop]])
   (:require
    [cljs.core.async :as async :refer [<! >! take! put! chan]]
+   [cljs.core.async.impl.dispatch :as async-dispatch]
    [clojure.string :as string]
    [haslett.client :as stream]
    [haslett.format :as ws-fmt]
@@ -11,6 +12,17 @@
    [otarta.format :as fmt :refer [PayloadFormat]]
    [otarta.packet :as packet]
    [otarta.util :as util :refer-macros [<err-> err-> err->>]]))
+
+
+(defn timeout-channels-wont-prevent-nodejs-exit!
+  "By default any timeout will keep the Node.js event loop active.  
+This means for example that timeout-channels (involved in pinging every keep-alive seconds) will prevent the cli from exiting, even though the connection to the broker is terminated.
+
+This function ensures that if there's no other activity keeping the event loop running besides timeout-channels, the process may exit."
+  []
+  (set! async-dispatch/queue-delay
+        (fn [f delay]
+          (.unref (js/setTimeout f delay)))))
 
 
 (extend-type js/Uint8Array
