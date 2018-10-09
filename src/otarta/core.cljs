@@ -164,6 +164,7 @@ This function ensures that if there's no other activity keeping the event loop r
 
 
 (defn stream-connected? [stream]
+  (info :stream-connected? {:stream stream})
   (when stream
     (-> stream :close-status (async/poll!) (nil?))))
 
@@ -212,36 +213,39 @@ This function ensures that if there's no other activity keeping the event loop r
     [nil client]))
 
 
+(defn- ping! [{stream :stream}]
+  (info :ping! :init)
+  (let [{:keys [sink source]} @stream
+        next-pingresp         (capture-first-packet source
+                                                    (packet-filter {[:first-byte :type] :pingresp}))]
+    (send-and-await-response (packet/pingreq) sink next-pingresp)))
+
+
 (defn start-pinger
-  "Keeps mqtt-connection alive by sending pingreq's every `keep-alive`
-  seconds."
   [{stream                   :stream
     {keep-alive :keep-alive} :config :as client}
    {:keys [delay] :or {delay 0}}]
-  (go
-    (let [{:keys [sink source]} @stream
-          control-ch            (async/promise-chan)
-          stop-status           (async/promise-chan)
-          pinger                {:stop-status stop-status :control-ch control-ch}
-          delay-ms              (* 1000 delay)]
-      (info :start-pinger {:delay-ms delay-ms})
-      (go-loop [n 0]
-        (when (zero? n)
-          (<! (async/timeout delay-ms)))
-        (info :pinger :sending-ping n)
-        (let [next-pingresp (capture-first-packet source
-                                                  (packet-filter {[:first-byte :type] :pingresp}))
-              [err resp]    (<! (send-and-await-response (packet/pingreq) sink next-pingresp))]
-          (info :pinger :pong-received? (not (boolean err)))
-          (if err
-            (do (error err)
-                (>! stop-status {:status :failed :reason err}))
-            (do (info :pinger :wait-keepalive-or-interrupt)
-                (let [[v ch] (async/alts! [control-ch (async/timeout (* 1000 keep-alive))])]
-                  (if v
-                    (do (info :pinger :stopping)
-                        (>! stop-status {:status :stopped}))
-                    (recur (inc n))))))))
+  (info :start-pinger :init)
+  (let [{:keys [control-ch stop-status]
+         :as   pinger} {:control-ch  (async/promise-chan)
+                        :stop-status (async/promise-chan)}]
+    (go
+      (go-loop [sleep-seconds delay]
+        (info :pinger {:sleep-seconds sleep-seconds})
+        (let [sleep   (async/timeout (* 1000 sleep-seconds))
+              stop!   (fn []
+                        (info :pinger :stopping)
+                        (async/put! stop-status {:status :stopped}))
+              failed! (fn [err]
+                        (error :pinger err)
+                        (async/put! stop-status {:status :failed :reason err}))
+              [v ch]  (async/alts! [control-ch sleep])]
+          (if v
+            (stop!)
+            (let [[err _] (<! (ping! client))]
+              (if err
+                (failed! err)
+                (recur keep-alive))))))
       (update client :pinger reset! pinger)
       [nil client])))
 
