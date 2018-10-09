@@ -235,10 +235,10 @@ This function ensures that if there's no other activity keeping the event loop r
         (let [sleep   (async/timeout (* 1000 sleep-seconds))
               stop!   (fn []
                         (info :pinger :stopping)
-                        (async/put! stop-status {:status :stopped}))
+                        (async/put! stop-status {:reason :stopped}))
               failed! (fn [err]
                         (error :pinger err)
-                        (async/put! stop-status {:status :failed :reason err}))
+                        (async/put! stop-status {:reason :failed :error err}))
               [v ch]  (async/alts! [control-ch sleep])]
           (if v
             (stop!)
@@ -271,22 +271,36 @@ This function ensures that if there's no other activity keeping the event loop r
           (subs 0 23)))))
 
 
-(declare disconnect)
-
-(defn- watch-connection
+(defn- start-connection-watcher
   "Will detect (ie log) when either stream is disconnected or pinger times out."
   [{pinger :pinger
     stream :stream :as client}]
   (info :watch-connection :init)
-  (let [stream-closed?  (-> stream deref :close-status)
+  (let [{:keys [control-ch]
+         :as   watcher}   {:control-ch (async/promise-chan)}
+        stream-closed?  (-> stream deref :close-status)
         pinger-stopped? (-> pinger deref :stop-status)]
     (go
       (go
-        (let [[_ ch] (async/alts! [stream-closed? pinger-stopped?])]
-          (if (= ch stream-closed?)
-            (error :watch-connection :stream-closed)
-            (error :watch-connection :pinger-stopped))
-          (disconnect client)))
+        (let [[v ch] (async/alts! [control-ch stream-closed? pinger-stopped?])]
+          (info :connection-watcher :received {:v v})
+          (cond
+            (= ch stream-closed?)  (do (error :connection-watcher :stream-closed)
+                                       (stop-pinger client))
+            (= ch pinger-stopped?) (do (error :connection-watcher :pinger-stopped)
+                                       (stream-disconnect client))
+            (= ch control-ch)      (info :connection-watcher :intentional-stop)
+            :else                  (error :connection-watcher :unkown-event))))
+      (update client :connection-watcher reset! watcher)
+      [nil client])))
+
+
+(defn- stop-connection-watcher [{watcher :connection-watcher :as client}]
+  (info :stop-connection-watcher :init {:connection-watcher watcher})
+  (let [control-ch (-> watcher deref :control-ch)]
+    (go
+      (when control-ch
+        (>! control-ch :stop))
       [nil client])))
 
 
@@ -312,10 +326,11 @@ WARNING: Connecting with a client-id that's already in use results in the existi
                           (assoc :client-id (client-id opts))
                           (merge default-opts)
                           (merge (select-keys opts [:keep-alive])))]
-     {:config            config
-      :stream            (atom nil)
-      :pinger            (atom nil)
-      :packet-identifier (atom 0)})))
+     {:config             config
+      :stream             (atom nil)
+      :pinger             (atom nil)
+      :packet-identifier  (atom 0)
+      :connection-watcher (atom nil)})))
 
 
 (defn connect
@@ -331,7 +346,7 @@ WARNING: Connecting with a client-id that's already in use results in the existi
             (stream-connect)
             (mqtt-connect)
             (start-pinger {:delay (:keep-alive config)})
-            (watch-connection))))
+            (start-connection-watcher))))
 
 
 
@@ -427,6 +442,7 @@ WARNING: Connecting with a client-id that's already in use results in the existi
   [client]
   (info :disconnect :client client)
   (<err-> client
+          stop-connection-watcher
           stop-pinger
           mqtt-disconnect
           stream-disconnect))
