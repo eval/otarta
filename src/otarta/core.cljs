@@ -277,20 +277,20 @@ This function ensures that if there's no other activity keeping the event loop r
     stream :stream :as client}]
   (info :start-connection-watcher :init)
   (let [{:keys [control-ch]
-         :as   watcher}   {:control-ch (async/promise-chan)}
+         :as   watcher} {:control-ch (async/promise-chan)}
         stream-closed?  (-> stream deref :close-status)
         pinger-stopped? (-> pinger deref :stop-status)]
     (go
       (go
         (let [[v ch] (async/alts! [control-ch stream-closed? pinger-stopped?])]
           (info :connection-watcher :received {:v v})
-          (cond
-            (= ch stream-closed?)  (do (error :connection-watcher :stream-closed)
-                                       (stop-pinger client))
-            (= ch pinger-stopped?) (do (error :connection-watcher :pinger-stopped)
-                                       (stream-disconnect client))
-            (= ch control-ch)      (info :connection-watcher :intentional-stop)
-            :else                  (error :connection-watcher :unkown-event))))
+          (condp = ch
+            stream-closed?  (do (error :connection-watcher :stream-closed)
+                                (stop-pinger client))
+            pinger-stopped? (do (error :connection-watcher :pinger-stopped)
+                                (stream-disconnect client))
+            control-ch      (info :connection-watcher :intentional-stop)
+            (error :connection-watcher :unkown-event))))
       (update client :connection-watcher reset! watcher)
       [nil client])))
 
