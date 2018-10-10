@@ -275,7 +275,7 @@ This function ensures that if there's no other activity keeping the event loop r
   "Will detect (ie log) when either stream is disconnected or pinger times out."
   [{pinger :pinger
     stream :stream :as client}]
-  (info :watch-connection :init)
+  (info :start-connection-watcher :init)
   (let [{:keys [control-ch]
          :as   watcher}   {:control-ch (async/promise-chan)}
         stream-closed?  (-> stream deref :close-status)
@@ -327,10 +327,10 @@ WARNING: Connecting with a client-id that's already in use results in the existi
                           (merge default-opts)
                           (merge (select-keys opts [:keep-alive])))]
      {:config             config
+      :connection-watcher (atom nil)
       :stream             (atom nil)
-      :pinger             (atom nil)
       :packet-identifier  (atom 0)
-      :connection-watcher (atom nil)})))
+      :pinger             (atom nil)})))
 
 
 (defn connect
