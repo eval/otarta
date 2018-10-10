@@ -1,4 +1,8 @@
-## unreleased
+## 0.3.1 / 2018-10-10
+
+### Added
+
+* log connection loss
 
 ### Fixed
 
