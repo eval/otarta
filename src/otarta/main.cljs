@@ -12,15 +12,15 @@
 (set! js/WebSocket (.-w3cwebsocket websocket))
 
 
-(def client (atom nil))
+(def mqtt-client (atom nil))
 
 
 (defn handle-sub [broker-url topic-filter]
   (info :handle-sub :broker-url broker-url :topic-filter topic-filter)
   (go
-    (reset! client (mqtt/client broker-url))
+    (reset! mqtt-client (mqtt/client broker-url))
 
-    (let [[err {sub-ch :ch}] (<! (mqtt/subscribe @client topic-filter {:format :string}))]
+    (let [[err {sub-ch :ch}] (<! (mqtt/subscribe @mqtt-client topic-filter {:format :string}))]
       (if err
         (do (error err) (println (str "Could not subscribe: " err)))
         (go-loop []
@@ -34,13 +34,13 @@
 (defn handle-pub [broker-url topic msg]
   (info :handle-pub :broker-url :topic topic :msg msg)
   (go
-    (reset! client (mqtt/client broker-url))
+    (reset! mqtt-client (mqtt/client broker-url))
 
-    (let [[err _] (<! (mqtt/publish @client topic msg {:format :string}))]
+    (let [[err _] (<! (mqtt/publish @mqtt-client topic msg {:format :string}))]
       (when err
         (error err)
         (println (str "Could not publish: " err)))
-      (mqtt/disconnect @client))))
+      (mqtt/disconnect @mqtt-client))))
 
 
 (defn -main [& args]
