@@ -164,7 +164,9 @@ This function ensures that if there's no other activity keeping the event loop r
 
 
 (defn stream-connected? [stream]
-  (-> stream :close-status (async/poll!) (nil?)))
+  (info :stream-connected? {:stream stream})
+  (when stream
+    (-> stream :close-status (async/poll!) (nil?))))
 
 
 (defn stream-connect [{{url :ws-url} :config :as client}]
@@ -206,47 +208,55 @@ This function ensures that if there's no other activity keeping the event loop r
 (defn mqtt-disconnect [{stream :stream :as client}]
   (info :mqtt-disconnect)
   (go
-    (when @stream
+    (when (stream-connected? @stream)
       (>! (:sink @stream) (packet/disconnect)))
     [nil client]))
 
 
+(defn- ping! [{stream :stream}]
+  (info :ping! :init)
+  (let [{:keys [sink source]} @stream
+        next-pingresp         (capture-first-packet source
+                                                    (packet-filter {[:first-byte :type] :pingresp}))]
+    (send-and-await-response (packet/pingreq) sink next-pingresp)))
+
+
 (defn start-pinger
-  "Keeps mqtt-connection alive by sending pingreq's every `keep-alive`
-  seconds."
   [{stream                   :stream
     {keep-alive :keep-alive} :config :as client}
    {:keys [delay] :or {delay 0}}]
-  (go
-    (let [{:keys [sink source]} @stream
-          control-ch            (async/promise-chan)
-          delay-ms              (* 1000 delay)]
-      (info :start-pinger {:delay-ms delay-ms})
-      (go-loop [n 0]
-        (when (zero? n)
-          (<! (async/timeout delay-ms)))
-        (info :start-pinger :sending-ping n)
-        (let [next-pingresp (capture-first-packet source
-                                                  (packet-filter {[:first-byte :type] :pingresp}))
-              [err resp]    (<! (send-and-await-response (packet/pingreq) sink next-pingresp))]
-          (info :start-pinger :pong-received? (not (boolean err)))
-          (if err
-            (error err)
-            (do (info :start-pinger :wait-keepalive-or-interrupt)
-                (let [[v ch] (async/alts! [control-ch (async/timeout (* 1000 keep-alive))])]
-                  (if v
-                    (info :start-pinger :stopping)
-                    (recur (inc n))))))))
-      (update client :pinger reset! control-ch)
+  (info :start-pinger :init)
+  (let [{:keys [control-ch stop-status]
+         :as   pinger} {:control-ch  (async/promise-chan)
+                        :stop-status (async/promise-chan)}]
+    (go
+      (go-loop [sleep-seconds delay]
+        (info :pinger {:sleep-seconds sleep-seconds})
+        (let [sleep   (async/timeout (* 1000 sleep-seconds))
+              stop!   (fn []
+                        (info :pinger :stopping)
+                        (async/put! stop-status {:reason :stopped}))
+              failed! (fn [err]
+                        (error :pinger err)
+                        (async/put! stop-status {:reason :failed :error err}))
+              [v ch]  (async/alts! [control-ch sleep])]
+          (if v
+            (stop!)
+            (let [[err _] (<! (ping! client))]
+              (if err
+                (failed! err)
+                (recur keep-alive))))))
+      (update client :pinger reset! pinger)
       [nil client])))
 
 
 (defn stop-pinger [{pinger :pinger :as client}]
   (info :stop-pinger :pinger (pr-str @pinger))
-  (go
-    (when @pinger
-      (>! @pinger :stop))
-    [nil client]))
+  (let [control-ch (-> pinger deref :control-ch)]
+    (go
+      (when control-ch
+        (>! control-ch :stop))
+      [nil client])))
 
 
 (defn- client-id
@@ -259,6 +269,39 @@ This function ensures that if there's no other activity keeping the event loop r
           (str (random-uuid))
           (string/replace #"-" "")
           (subs 0 23)))))
+
+
+(defn- start-connection-watcher
+  "Will detect (ie log) when either stream is disconnected or pinger times out."
+  [{pinger :pinger
+    stream :stream :as client}]
+  (info :watch-connection :init)
+  (let [{:keys [control-ch]
+         :as   watcher}   {:control-ch (async/promise-chan)}
+        stream-closed?  (-> stream deref :close-status)
+        pinger-stopped? (-> pinger deref :stop-status)]
+    (go
+      (go
+        (let [[v ch] (async/alts! [control-ch stream-closed? pinger-stopped?])]
+          (info :connection-watcher :received {:v v})
+          (cond
+            (= ch stream-closed?)  (do (error :connection-watcher :stream-closed)
+                                       (stop-pinger client))
+            (= ch pinger-stopped?) (do (error :connection-watcher :pinger-stopped)
+                                       (stream-disconnect client))
+            (= ch control-ch)      (info :connection-watcher :intentional-stop)
+            :else                  (error :connection-watcher :unkown-event))))
+      (update client :connection-watcher reset! watcher)
+      [nil client])))
+
+
+(defn- stop-connection-watcher [{watcher :connection-watcher :as client}]
+  (info :stop-connection-watcher :init {:connection-watcher watcher})
+  (let [control-ch (-> watcher deref :control-ch)]
+    (go
+      (when control-ch
+        (>! control-ch :stop))
+      [nil client])))
 
 
 (defn client
@@ -283,26 +326,27 @@ WARNING: Connecting with a client-id that's already in use results in the existi
                           (assoc :client-id (client-id opts))
                           (merge default-opts)
                           (merge (select-keys opts [:keep-alive])))]
-     {:config            config
-      :stream            (atom nil)
-      :pinger            (atom nil)
-      :packet-identifier (atom 0)})))
+     {:config             config
+      :stream             (atom nil)
+      :pinger             (atom nil)
+      :packet-identifier  (atom 0)
+      :connection-watcher (atom nil)})))
 
 
 (defn connect
   "Connect with broker. Idempotent.
   Typically there's no need to call this as it's called from `publish` and `subscribe`."
-  [{config :config :as client}]
-  (info :connect)
-  ;; naive way for now
-  (let [stream-present? (-> client :stream deref)]
-    (debug :connect :stream-connect-required? (not stream-present?))
-    (if stream-present?
-      (go [nil client])
-      (<err-> client
-              (stream-connect)
-              (mqtt-connect)
-              (start-pinger {:delay (:keep-alive config)})))))
+  [{stream :stream
+    config :config :as client}]
+  (info :connect :init)
+  (debug :connect :stream-connect-required? (not (stream-connected? @stream)))
+  (if (stream-connected? @stream)
+    (go [nil client])
+    (<err-> client
+            (stream-connect)
+            (mqtt-connect)
+            (start-pinger {:delay (:keep-alive config)})
+            (start-connection-watcher))))
 
 
 
@@ -398,6 +442,7 @@ WARNING: Connecting with a client-id that's already in use results in the existi
   [client]
   (info :disconnect :client client)
   (<err-> client
+          stop-connection-watcher
           stop-pinger
           mqtt-disconnect
           stream-disconnect))
