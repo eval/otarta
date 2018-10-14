@@ -92,13 +92,21 @@
     (testing "writes correct bytes"
       (are [input expected] (= expected (data->byte-array (data-fn input)))
         {:packet-identifier 1
-         :topic-filter      "some/topic/filter/+"
-         :qos               1}
+         :subscriptions     [{:topic-filter "some/topic/filter/+"
+                              :qos          1}]}
         [130 24 0 1 0 19 115 111 109 101 47 116 111 112 105 99 47 102 105 108 116 101 114 47 43 1]
 
+        ;; multiple
         {:packet-identifier 1
-         :topic-filter (str "dev/prefix/" (apply str (interpose "/" (repeat 5 "some/topic/filter/that/is/longer/than/256/characters"))))
-         :qos 2}
+         :subscriptions     [{:topic-filter "some/topic/filter/+" :qos 1}
+                             {:topic-filter "other/topic/filter/+" :qos 2}]}
+        [130 47 0 1
+         0 19 115 111 109 101 47 116 111 112 105 99 47 102 105 108 116 101 114 47 43 1
+         0 20 111 116 104 101 114 47 116 111 112 105 99 47 102 105 108 116 101 114 47 43 2]
+
+        {:packet-identifier 1
+         :subscriptions [{:topic-filter      (str "dev/prefix/" (apply str (interpose "/" (repeat 5 "some/topic/filter/that/is/longer/than/256/characters"))))
+                          :qos               2}]}
         [130 152 2 0 1 1 19 100 101 118 47 112 114 101 102 105 120 47 115 111 109 101 47 116 111 112 105 99 47 102 105 108 116 101 114 47 116 104 97 116 47 105 115 47 108 111 110 103 101 114 47 116 104 97 110 47 50 53 54 47 99 104 97 114 97 99 116 101 114 115 47 115 111 109 101 47 116 111 112 105 99 47 102 105 108 116 101 114 47 116 104 97 116 47 105 115 47 108 111 110 103 101 114 47 116 104 97 110 47 50 53 54 47 99 104 97 114 97 99 116 101 114 115 47 115 111 109 101 47 116 111 112 105 99 47 102 105 108 116 101 114 47 116 104 97 116 47 105 115 47 108 111 110 103 101 114 47 116 104 97 110 47 50 53 54 47 99 104 97 114 97 99 116 101 114 115 47 115 111 109 101 47 116 111 112 105 99 47 102 105 108 116 101 114 47 116 104 97 116 47 105 115 47 108 111 110 103 101 114 47 116 104 97 110 47 50 53 54 47 99 104 97 114 97 99 116 101 114 115 47 115 111 109 101 47 116 111 112 105 99 47 102 105 108 116 101 114 47 116 104 97 116 47 105 115 47 108 111 110 103 101 114 47 116 104 97 110 47 50 53 54 47 99 104 97 114 97 99 116 101 114 115 2]
 ))))
 
@@ -109,7 +117,13 @@
       [144 3 0 1 0] {:first-byte {:type :suback} :remaining-length 3}
 
       [144 3 0 1 0] {:remaining-bytes {:packet-identifier 1}}
-      [144 3 0 1 1] {:remaining-bytes {:payload {:max-qos 1}}}
+      [144 3 0 1 1] {:remaining-bytes
+                     {:subscriptions [{:max-qos 1 :failure? false}]}}
+
+      ;; receiving multiple confirmations
+      [144 4 0 1
+       1 128] {:remaining-bytes {:subscriptions [{:max-qos 1 :failure? false}
+                                                 {:max-qos 0 :failure? true}]}}
 )))
 
 

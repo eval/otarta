@@ -142,28 +142,44 @@
 
 ;;;; SUBSCRIBE
 
-(defn subscribe [{:keys [packet-identifier topic-filter qos] :or {qos 0}}]
-  {:pre [(and packet-identifier topic-filter)]}
+(defn subscribe [{:keys [packet-identifier subscriptions]}]
+  {:pre [(and packet-identifier (seq subscriptions))]}
   {:first-byte      {:type :subscribe :reserved 2}
    :remaining-bytes {:packet-identifier packet-identifier
-                     :topic-filter      topic-filter
-                     :qos               qos}})
+                     :subscriptions     subscriptions}})
+
+(comment
+  (def buffer (buf/allocate 24))
+
+  ;; writing map containing items with unique specs
+  (buf/write! buffer {:count 1 :items [{:a 1} {:a 2}]}
+              (apply buf/spec [:count buf/int16
+                               :items (buf/spec (buf/spec :a buf/int16)
+                                                (buf/spec :a buf/int16))]))
+
+  (buf/read buffer (buf/repeat 6 buf/byte)))
 
 
-(defmethod encode-spec :subscribe [{{:keys [topic-filter]} :remaining-bytes}]
-  {:first-byte      (octet-spec/bitmask {:type     [4 4]
-                                         :reserved [0 4]})
-   :remaining-bytes [:packet-identifier buf/uint16
-                     :topic-filter (octet-spec/utf8-encoded-string topic-filter)
-                     :qos buf/byte]})
+(defmethod encode-spec :subscribe [{{:keys [subscriptions]} :remaining-bytes}]
+  (let [sub-spec           #(buf/spec :topic-filter (octet-spec/utf8-encoded-string (:topic-filter %))
+                                      :qos buf/byte)
+        subscriptions-spec (apply buf/spec (mapv sub-spec subscriptions))]
+    {:first-byte      (octet-spec/bitmask {:type     [4 4]
+                                           :reserved [0 4]})
+     :remaining-bytes [:packet-identifier buf/uint16
+                       :subscriptions subscriptions-spec]}))
 
 ;;;; SUBACK
 
-(defmethod decode-spec :suback [_]
-  {:first-byte      (octet-spec/bitmask {:type [4 4]})
-   :remaining-bytes [:packet-identifier buf/uint16
-                     :payload (octet-spec/bitmask {:max-qos  [0 2]
-                                                   :failure? [7 1 :bool]})]})
+(defmethod decode-spec :suback [buf]
+  (let [rem-len     (buf/read buf octet-spec/variable-byte-integer* {:offset 1})
+        pkt-id-spec buf/uint16
+        subs-len    (- rem-len (buf/size pkt-id-spec))]
+    {:first-byte      (octet-spec/bitmask {:type [4 4]})
+     :remaining-bytes [:packet-identifier pkt-id-spec
+                       :subscriptions (buf/repeat subs-len
+                                                  (octet-spec/bitmask {:max-qos  [0 2]
+                                                                       :failure? [7 1 :bool]}))]}))
 
 ;;;; UNSUBSCRIBE
 

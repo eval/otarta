@@ -409,13 +409,15 @@ WARNING: Connecting with a client-id that's already in use results in the existi
                                         fmt/read
                                         (subscription-chan client topic-filter))
           pktid                 (next-packet-identifier client)
-          sub-pkt               (packet/subscribe {:topic-filter      topic-filter
+          subs                  [{:topic-filter topic-filter :qos 0}]
+          sub-pkt               (packet/subscribe {:subscriptions     subs
                                                    :packet-identifier pktid})
           next-suback           (capture-first-packet source
                                                       (packet-filter {[:first-byte :type] :suback
                                                                       [:remaining-bytes :packet-identifier] pktid}))
-          [mqtt-err {{{:keys [_max-qos failure?] :as _sub-result} :payload} :remaining-bytes}]
-          (<! (send-and-await-response sub-pkt sink next-suback))]
+          [mqtt-err {{:keys [subscriptions]} :remaining-bytes}]
+          (<! (send-and-await-response sub-pkt sink next-suback))
+          failure?              (some :failure? subscriptions)]
       (cond
         sub-err  [sub-err nil]
         mqtt-err [mqtt-err nil]
