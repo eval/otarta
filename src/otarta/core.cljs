@@ -418,30 +418,37 @@ WARNING: Connecting with a client-id that's already in use results in the existi
     [nil (capture-all-packets source subscription-xf)]))
 
 
+(defn- send-subscribe-and-await-suback [{stream :stream :as client} subscriptions]
+  (let [{:keys [sink source]} @stream
+        pktid                 (next-packet-identifier client)
+        sub-pkt               (packet/subscribe {:subscriptions     subscriptions
+                                                 :packet-identifier pktid})
+        suback-pkt-filter     (packet-filter {[:first-byte :type] :suback
+                                              [:remaining-bytes :packet-identifier] pktid})
+        next-suback           (capture-first-packet source suback-pkt-filter)]
+    (send-and-await-response sub-pkt sink next-suback)))
+
+
 (defn- subscribe*
-  [{stream :stream :as client} app-topic-filter {:keys [format] :or {format :string}}]
+  [client app-topic-filter {:keys [format] :or {format :string}}]
   (info :subscribe :app-topic-filter app-topic-filter)
   (go
-    (let [{:keys [sink source]} @stream
-          topic-filter          (app-topic->broker-topic client app-topic-filter)
-          [sub-err sub-ch]      (err->> format
-                                        fmt/read
-                                        (subscription-chan client topic-filter))
-          pktid                 (next-packet-identifier client)
-          subs                  [{:topic-filter topic-filter :qos 0}]
-          sub-pkt               (packet/subscribe {:subscriptions     subs
-                                                   :packet-identifier pktid})
-          next-suback           (capture-first-packet source
-                                                      (packet-filter {[:first-byte :type] :suback
-                                                                      [:remaining-bytes :packet-identifier] pktid}))
-          [mqtt-err {{:keys [subscriptions]} :remaining-bytes}]
-          (<! (send-and-await-response sub-pkt sink next-suback))
-          failure?              (some :failure? subscriptions)]
-      (cond
-        sub-err  [sub-err nil]
-        mqtt-err [mqtt-err nil]
-        failure? [:broker-refused-sub nil]
-        :else    [nil {:ch sub-ch}]))))
+    (let [topic-filter     (app-topic->broker-topic client app-topic-filter)
+          [sub-err sub-ch] (err->> format
+                                   fmt/read
+                                   (subscription-chan client topic-filter))]
+      (if sub-err
+        [sub-err nil]
+        (let [subs [{:topic-filter topic-filter
+                     :qos          0}]
+
+              [mqtt-err {{:keys [subscriptions]} :remaining-bytes}]
+              (<! (send-subscribe-and-await-suback client subs))
+              subscribe-fail? (some :failure? subscriptions)]
+          (cond
+            mqtt-err        [mqtt-err nil]
+            subscribe-fail? [:broker-refused-sub nil]
+            :else           [nil {:ch sub-ch}]))))))
 
 
 (defn subscribe
