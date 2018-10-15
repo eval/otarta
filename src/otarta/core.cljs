@@ -328,9 +328,10 @@ WARNING: Connecting with a client-id that's already in use results in the existi
                           (merge (select-keys opts [:keep-alive])))]
      {:config             config
       :connection-watcher (atom nil)
-      :stream             (atom nil)
+      :did-connect?       (atom false)
       :packet-identifier  (atom 0)
-      :pinger             (atom nil)})))
+      :pinger             (atom nil)
+      :stream             (atom nil)})))
 
 
 (defn connect
@@ -349,7 +350,6 @@ WARNING: Connecting with a client-id that's already in use results in the existi
             (start-connection-watcher))))
 
 
-
 (defn- publish* [{stream :stream :as client} app-topic payload {:keys [format retain?] :or {format :string retain? false}}]
   (info :publish :client client :app-topic app-topic :payload payload :format format)
   (go
@@ -365,6 +365,25 @@ WARNING: Connecting with a client-id that's already in use results in the existi
             [nil {}])))))
 
 
+(defn- did-connect! [client]
+  (info :did-connect! :init)
+  (go
+    (update client :did-connect? reset! true)
+    [nil client]))
+
+
+(defn- ensure-did-connect
+  "Does a connect when client was never connected, else does nothing."
+  [{:keys [did-connect?] :as client}]
+  (info :ensure-did-connect :init)
+  (info :ensure-did-connect :connect-required? (not @did-connect?))
+  (if-not @did-connect?
+    (<err-> client
+            connect
+            did-connect!)
+    (go [nil client])))
+
+
 (defn publish
   "Yields async-channel that returns [err result] when msg is published.
 
@@ -374,7 +393,7 @@ WARNING: Connecting with a client-id that's already in use results in the existi
   ([client topic payload] (publish client topic payload {}))
   ([client topic payload opts]
    (<err-> client
-           connect
+           ensure-did-connect
            (publish* topic payload opts))))
 
 
@@ -435,7 +454,7 @@ WARNING: Connecting with a client-id that's already in use results in the existi
   ([client topic-filter] (subscribe client topic-filter {}))
   ([client topic-filter opts]
    (<err-> client
-           connect
+           ensure-did-connect
            (subscribe* topic-filter opts))))
 
 
