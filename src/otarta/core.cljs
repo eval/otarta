@@ -331,7 +331,8 @@ WARNING: Connecting with a client-id that's already in use results in the existi
       :did-connect?       (atom false)
       :packet-identifier  (atom 0)
       :pinger             (atom nil)
-      :stream             (atom nil)})))
+      :stream             (atom nil)
+      :subscriptions      (atom {})})))
 
 
 (defn connect
@@ -429,6 +430,11 @@ WARNING: Connecting with a client-id that's already in use results in the existi
     (send-and-await-response sub-pkt sink next-suback)))
 
 
+(defn- store-subscription [{:keys [subscriptions] :as _client}
+                           {:keys [topic-filter] :as sub}]
+  (swap! subscriptions assoc topic-filter sub))
+
+
 (defn- subscribe*
   [client app-topic-filter {:keys [format] :or {format :string}}]
   (info :subscribe :app-topic-filter app-topic-filter)
@@ -439,12 +445,15 @@ WARNING: Connecting with a client-id that's already in use results in the existi
                                    (subscription-chan client topic-filter))]
       (if sub-err
         [sub-err nil]
-        (let [subs [{:topic-filter topic-filter
-                     :qos          0}]
+        (let [sub {:topic-filter topic-filter
+                   :ch           sub-ch
+                   :qos          0}
 
-              [mqtt-err {{:keys [subscriptions]} :remaining-bytes}]
-              (<! (send-subscribe-and-await-suback client subs))
-              subscribe-fail? (some :failure? subscriptions)]
+              [mqtt-err {{[sub-ack] :subscriptions} :remaining-bytes}]
+              (<! (send-subscribe-and-await-suback client [sub]))
+              subscribe-fail? (:failure? sub-ack)]
+          (when-not subscribe-fail?
+            (store-subscription client (merge sub sub-ack)))
           (cond
             mqtt-err        [mqtt-err nil]
             subscribe-fail? [:broker-refused-sub nil]
