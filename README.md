@@ -1,5 +1,7 @@
 # Otarta
 
+*Canonical repository: https://gitlab.com/eval/otarta*
+
 [![pipeline status](https://gitlab.com/eval/otarta/badges/master/pipeline.svg)](https://gitlab.com/eval/otarta/commits/master)
 [![Clojars Project](https://img.shields.io/clojars/v/eval/otarta.svg)](https://clojars.org/eval/otarta)
 
