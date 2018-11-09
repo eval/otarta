@@ -2,6 +2,7 @@
 
 *Canonical repository: https://gitlab.com/eval/otarta*
 
+[![project chat](https://img.shields.io/badge/zulip-join_chat-brightgreen.svg)](https://clojurians.zulipchat.com/#narrow/stream/151157-library.2FOtarta)
 [![pipeline status](https://gitlab.com/eval/otarta/badges/master/pipeline.svg)](https://gitlab.com/eval/otarta/commits/master)
 [![Clojars Project](https://img.shields.io/clojars/v/eval/otarta.svg)](https://clojars.org/eval/otarta)
 
