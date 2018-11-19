@@ -2,6 +2,8 @@
 
 *Canonical repository: https://gitlab.com/eval/otarta*
 
+**docs (latest)**:  [![cljdoc badge](https://cljdoc.org/badge/eval/otarta)](https://cljdoc.org/d/eval/otarta/CURRENT)
+
 [![discuss at Clojurians-Zulip](https://img.shields.io/badge/clojurians--zulip-otarta-brightgreen.svg)](https://clojurians.zulipchat.com/#narrow/stream/151157-project.2FOtarta)
 [![pipeline status](https://gitlab.com/eval/otarta/badges/master/pipeline.svg)](https://gitlab.com/eval/otarta/commits/master)
 [![Clojars Project](https://img.shields.io/clojars/v/eval/otarta.svg)](https://clojars.org/eval/otarta)
