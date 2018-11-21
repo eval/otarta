@@ -2,7 +2,10 @@
 
 *Canonical repository: https://gitlab.com/eval/otarta*
 
-[![discuss at Clojurians-Zulip](https://img.shields.io/badge/clojurians--zulip-otarta-brightgreen.svg)](https://clojurians.zulipchat.com/#narrow/stream/151157-project.2FOtarta)
+
+[![cljdoc badge](https://img.shields.io/badge/cljdoc-latest-blue.svg)](https://cljdoc.org/d/eval/otarta/CURRENT)
+[![cljdoc badge](https://img.shields.io/badge/cljdoc-0.3.1-blue.svg)](https://cljdoc.org/d/eval/otarta/0.3.1)
+[![discuss at Clojurians-Zulip](https://img.shields.io/badge/clojurians%20zulip-otarta-brightgreen.svg)](https://clojurians.zulipchat.com/#narrow/stream/151157-Otarta)
 [![pipeline status](https://gitlab.com/eval/otarta/badges/master/pipeline.svg)](https://gitlab.com/eval/otarta/commits/master)
 [![Clojars Project](https://img.shields.io/clojars/v/eval/otarta.svg)](https://clojars.org/eval/otarta)
 
@@ -15,12 +18,12 @@ _NOTE: this is pre-alpha software with an API that will change (see the [CHANGEL
 
 Leiningen:
 ```clojure
-[eval/otarta "0.3.0"]
+[eval/otarta "0.3.1"]
 ```
 
 Deps:
 ```clojure
-eval/otarta {:mvn/version "0.3.0"}
+eval/otarta {:mvn/version "0.3.1"}
 ```
 
 ## Examples
