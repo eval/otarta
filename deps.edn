@@ -2,19 +2,19 @@
  ["src" "test"]
 
  :deps
- {org.clojure/clojure {:mvn/version "1.9.0"}
+ {org.clojure/clojure {:mvn/version "1.10.0-beta8"}
 
   ;; ClojureScript
-  org.clojure/clojurescript {:mvn/version "1.10.339"
+  org.clojure/clojurescript {:mvn/version "1.10.439"
                              #_#_:git/url "https://github.com/clojure/clojurescript.git"
                              #_#_:sha     "72e99c5d6f7164153cf6cf5613704ea342bde8da"}
 
   ;; application
-  funcool/octet              {:mvn/version "1.1.1"}
+  funcool/octet              {:mvn/version "1.1.2"}
   haslett                    {:local/root "vendor/haslett" :deps/manifest :deps}
   lambdaisland/uri           {:mvn/version "1.1.0"}
-  org.clojure/core.async     {:mvn/version "0.4.474"}
-  org.harto/huon             {:mvn/version "0.5.0"}
+  org.clojure/core.async     {:mvn/version "0.4.490"}
+  org.harto/huon             {:mvn/version "0.5.1"}
   com.cognitect/transit-cljs {:mvn/version "0.8.256"}}
 
  :aliases
@@ -28,5 +28,5 @@
                :main-opts  ["-m" "cljs-test-runner.main"]}
   :test-watch {:extra-deps {olical/cljs-test-runner {:mvn/version "2.1.0"}}
                :main-opts  ["-m" "cljs-test-runner.main" "--watch" "src"]}
-  :outdated   {:extra-deps {olical/depot {:mvn/version "1.2.0"}}
+  :outdated   {:extra-deps {olical/depot {:mvn/version "1.5.0"}}
                :main-opts  ["-m" "depot.outdated.main"]}}}
