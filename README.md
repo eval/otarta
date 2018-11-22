@@ -228,3 +228,4 @@ Copyright (c) 2018 Alliander N.V.
 See [LICENSE](./LICENSE).  
 
 For licenses of third-party software that this software uses, see [LICENSE-3RD-PARTY](./LICENSE-3RD-PARTY).
+
